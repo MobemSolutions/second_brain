@@ -1,0 +1,11 @@
+services:
+  second-brain:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DB_PATH=/app/data/second_brain.db
+      - NODE_ENV=production
+    restart: unless-stopped
