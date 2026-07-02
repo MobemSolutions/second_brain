@@ -110,7 +110,7 @@ export default function CalendarView({ taches, onAdd }: SharedViewProps & { onAd
             <Settings size={14} style={{ color: appleSaved ? "#10b981" : "#9c9c9a" }} />
           </button>
           {showSettings && (
-            <div className="absolute right-0 top-10 z-20 w-80 p-4 space-y-3 rounded-lg shadow-xl"
+            <div className="absolute right-0 top-10 z-20 w-80 max-w-[calc(100vw-2rem)] p-4 space-y-3 rounded-lg shadow-xl"
               style={{ backgroundColor: "#ffffff", border: "1px solid #e4e2de" }}>
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium" style={{ color: "#1a1a18" }}>📅 Apple Calendar</p>

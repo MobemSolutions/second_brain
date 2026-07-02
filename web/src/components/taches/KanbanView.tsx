@@ -45,7 +45,7 @@ export default function KanbanView({ taches, projets, onDelete, onMove, onRefres
   const byStatut = (s: Statut) => taches.filter((t) => t.statut === s);
 
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
       {COLS.map((col) => {
         const cards = byStatut(col.id);
         const isDragOver = dragOverCol === col.id;

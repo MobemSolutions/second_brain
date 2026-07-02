@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Inbox, Target, CheckSquare,
   Dumbbell, Apple, Heart, Film, CreditCard, Brain, HeartHandshake, CalendarClock, ShoppingCart,
+  Menu, X,
 } from "lucide-react";
 
 const nav = [
@@ -44,34 +46,91 @@ const nav = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    document.body.style.overflow = open ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [open]);
 
   return (
-    <aside
-      className="w-52 shrink-0 flex flex-col"
-      style={{ backgroundColor: "#ffffff", borderRight: "1px solid #e4e2de" }}
-    >
-      {/* Brand */}
-      <div className="px-4 py-4" style={{ borderBottom: "1px solid #e4e2de" }}>
-        <div className="flex items-center gap-2.5">
+    <>
+      {/* Mobile topbar */}
+      <div
+        className="lg:hidden fixed top-0 left-0 right-0 z-30 flex items-center gap-3 px-4 h-14"
+        style={{ backgroundColor: "#ffffff", borderBottom: "1px solid #e4e2de" }}
+      >
+        <button
+          onClick={() => setOpen(true)}
+          aria-label="Ouvrir le menu"
+          className="p-1.5 -ml-1.5 rounded-md"
+          style={{ color: "#5a5a58" }}
+        >
+          <Menu size={20} />
+        </button>
+        <div className="flex items-center gap-2 min-w-0">
           <div
-            className="w-7 h-7 flex items-center justify-center shrink-0"
+            className="w-6 h-6 flex items-center justify-center shrink-0"
             style={{ background: "#6d28d9", borderRadius: "5px" }}
           >
-            <Brain size={13} className="text-white" />
+            <Brain size={12} className="text-white" />
           </div>
-          <div className="min-w-0">
-            <p className="text-[13px] font-semibold truncate" style={{ color: "#1a1a18" }}>
-              Second Brain
-            </p>
-            <p className="text-[10px]" style={{ color: "#b0aea9" }}>
-              {new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
-            </p>
-          </div>
+          <p className="text-[13px] font-semibold truncate" style={{ color: "#1a1a18" }}>
+            Second Brain
+          </p>
         </div>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-2 py-2">
+      {/* Mobile overlay */}
+      {open && (
+        <div
+          className="lg:hidden fixed inset-0 z-40 bg-black/40"
+          onClick={() => setOpen(false)}
+        />
+      )}
+
+      <aside
+        className={`w-64 lg:w-52 shrink-0 flex flex-col fixed lg:static inset-y-0 left-0 z-50 transform transition-transform duration-200 ease-out ${
+          open ? "translate-x-0" : "-translate-x-full"
+        } lg:translate-x-0`}
+        style={{ backgroundColor: "#ffffff", borderRight: "1px solid #e4e2de" }}
+      >
+        {/* Brand */}
+        <div className="px-4 py-4 flex items-center justify-between" style={{ borderBottom: "1px solid #e4e2de" }}>
+          <div className="flex items-center gap-2.5">
+            <div
+              className="w-7 h-7 flex items-center justify-center shrink-0"
+              style={{ background: "#6d28d9", borderRadius: "5px" }}
+            >
+              <Brain size={13} className="text-white" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold truncate" style={{ color: "#1a1a18" }}>
+                Second Brain
+              </p>
+              <p className="text-[10px]" style={{ color: "#b0aea9" }}>
+                {new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setOpen(false)}
+            aria-label="Fermer le menu"
+            className="lg:hidden p-1 rounded-md shrink-0"
+            style={{ color: "#5a5a58" }}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 overflow-y-auto px-2 py-2">
         {nav.map((section) => (
           <div key={section.group} className={section.label ? "mt-4" : ""}>
             {section.label && (
@@ -112,12 +171,13 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      <style>{`
-        .sidebar-link:hover {
-          background-color: #eeece9 !important;
-          color: #1a1a18 !important;
-        }
-      `}</style>
-    </aside>
+        <style>{`
+          .sidebar-link:hover {
+            background-color: #eeece9 !important;
+            color: #1a1a18 !important;
+          }
+        `}</style>
+      </aside>
+    </>
   );
 }

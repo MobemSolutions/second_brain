@@ -571,7 +571,7 @@ export default function PlanningPage() {
       {/* Edit creneau modal */}
       {editingCreneau && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setEditingCreneau(null)}>
-          <div className="card w-80 space-y-4" onClick={(e) => e.stopPropagation()}>
+          <div className="card w-80 max-w-[calc(100vw-2rem)] space-y-4" onClick={(e) => e.stopPropagation()}>
             <p className="text-sm font-medium text-zinc-200">
               {carteById.get(editingCreneau.carte_id)?.emoji} {carteById.get(editingCreneau.carte_id)?.titre}
             </p>

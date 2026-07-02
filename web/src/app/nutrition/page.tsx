@@ -149,13 +149,13 @@ export default function NutritionPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-semibold text-zinc-100">Nutrition</h1>
           <p className="text-zinc-500 text-sm mt-0.5">Suivi alimentaire quotidien</p>
         </div>
         {/* Date nav */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => setDate(shiftDate(date, -1))} className="btn-ghost p-2">
             <ChevronLeft size={15} />
           </button>
