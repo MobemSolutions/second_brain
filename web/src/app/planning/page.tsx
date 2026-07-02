@@ -426,7 +426,7 @@ export default function PlanningPage() {
                 </div>
                 <div>
                   <label className="text-xs text-zinc-500 mb-1 block">Couleur</label>
-                  <div className="flex gap-1.5">
+                  <div className="flex items-center gap-1.5">
                     {COULEURS.map((c) => (
                       <button
                         key={c}
@@ -440,6 +440,25 @@ export default function PlanningPage() {
                         }}
                       />
                     ))}
+                    <span className="w-px h-5 bg-zinc-800 mx-0.5" />
+                    <label
+                      title="Autre couleur…"
+                      className="relative w-6 h-6 rounded-full border-2 shrink-0 cursor-pointer overflow-hidden"
+                      style={{
+                        backgroundColor: COULEURS.includes(carteForm.couleur) ? "#ffffff" : carteForm.couleur,
+                        borderColor: !COULEURS.includes(carteForm.couleur) ? "#1a1a18" : "#3f3f46",
+                        backgroundImage: COULEURS.includes(carteForm.couleur)
+                          ? "conic-gradient(red, yellow, lime, cyan, blue, magenta, red)"
+                          : undefined,
+                      }}
+                    >
+                      <input
+                        type="color"
+                        value={carteForm.couleur}
+                        onChange={(e) => setCarteForm((p) => ({ ...p, couleur: e.target.value }))}
+                        className="absolute -top-1 -left-1 w-8 h-8 cursor-pointer opacity-0"
+                      />
+                    </label>
                   </div>
                 </div>
                 <button type="submit" className="btn-primary py-1.5 px-3 text-xs">Créer</button>
