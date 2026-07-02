@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   const statut = req.nextUrl.searchParams.get("statut");
 
   let query = "SELECT * FROM media WHERE 1=1";
-  const args: unknown[] = [];
+  const args: (string | number)[] = [];
 
   if (type) { query += " AND type = ?"; args.push(type); }
   if (statut) { query += " AND statut = ?"; args.push(statut); }

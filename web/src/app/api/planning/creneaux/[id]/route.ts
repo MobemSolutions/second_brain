@@ -9,14 +9,14 @@ export async function PATCH(
   const { id } = await params;
   const body = await req.json();
 
-  const allowed = ["calories", "proteines", "glucides", "lipides", "notes", "pdf_path", "day_type"];
+  const allowed = ["jour", "heure_debut", "heure_fin"];
   const fields = Object.keys(body).filter((k) => allowed.includes(k));
   if (!fields.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
 
   const set = fields.map((f) => `${f} = ?`).join(", ");
-  db.prepare(`UPDATE nutrition SET ${set} WHERE id = ?`).run(...fields.map((f) => body[f]), id);
+  db.prepare(`UPDATE planning_creneaux SET ${set} WHERE id = ?`).run(...fields.map((f) => body[f]), id);
 
-  return NextResponse.json(db.prepare("SELECT * FROM nutrition WHERE id = ?").get(id));
+  return NextResponse.json(db.prepare("SELECT * FROM planning_creneaux WHERE id = ?").get(id));
 }
 
 export async function DELETE(
@@ -25,6 +25,6 @@ export async function DELETE(
 ) {
   const db = getDb();
   const { id } = await params;
-  db.prepare("DELETE FROM nutrition WHERE id = ?").run(id);
+  db.prepare("DELETE FROM planning_creneaux WHERE id = ?").run(id);
   return NextResponse.json({ ok: true });
 }

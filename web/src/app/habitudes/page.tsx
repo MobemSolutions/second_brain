@@ -1,44 +1,57 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Save } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Save, Plus, Pencil, Trash2, GripVertical } from "lucide-react";
 
-interface Habitude {
-  id?: number;
+type Section = "metriques" | "general" | "matin" | "soir" | "ponctuel";
+type ScoreImpact = "positif" | "negatif" | "aucun";
+
+interface HabitDef {
+  id: number;
+  cle: string;
+  label: string;
+  emoji: string | null;
+  type: "checkbox" | "metric";
+  section: Section;
+  unite: string | null;
+  cible: number | null;
+  target_freq: string | null;
+  score_impact: ScoreImpact;
+  ordre: number;
+}
+
+interface HistValue {
   date: string;
-  sommeil: number | null;
-  eau: number | null;
-  meditation: number | null;
-  lecture: number | null;
-  sport_fait: number;
-  alcool: number;
-  ecran_dodo: number;
-  nofap: number;
-  brossage_matin: number;
-  brossage_soir: number;
-  gratte_langue: number;
-  fil_dentaire: number;
-  creme_solaire: number;
-  soin_peau_soir: number;
+  habit_id: number;
+  valeur: number | null;
+}
+
+interface Journal {
   humeur: number | null;
   energie: number | null;
   notes: string;
 }
 
-interface HistoryEntry {
-  date: string;
-  score: number;
-}
+const SECTIONS: { key: Section; title: string }[] = [
+  { key: "metriques", title: "Métriques" },
+  { key: "general", title: "Check-list" },
+  { key: "matin", title: "Matin" },
+  { key: "soir", title: "Soir" },
+  { key: "ponctuel", title: "Ponctuel" },
+];
 
-function calcScore(h: Habitude): number {
-  const pos =
-    (h.sport_fait ? 1 : 0) +
-    (h.nofap ? 1 : 0) +
-    ((h.sommeil ?? 0) >= 7 ? 1 : 0) +
-    ((h.eau ?? 0) >= 2 ? 1 : 0) +
-    ((h.meditation ?? 0) >= 10 ? 1 : 0) +
-    ((h.lecture ?? 0) >= 20 ? 1 : 0);
-  const neg = (h.alcool ? 1 : 0) + (h.ecran_dodo ? 1 : 0);
+function calcScore(defs: HabitDef[], values: Record<number, number | null | undefined>): number {
+  let pos = 0, neg = 0;
+  for (const d of defs) {
+    if (d.score_impact === "aucun") continue;
+    const v = values[d.id];
+    const done = d.type === "metric"
+      ? (d.cible != null ? (v ?? 0) >= d.cible : (v ?? 0) > 0)
+      : !!v;
+    if (!done) continue;
+    if (d.score_impact === "positif") pos++;
+    else neg++;
+  }
   return Math.max(0, Math.min(10, pos * 2 - neg));
 }
 
@@ -57,65 +70,160 @@ function scoreLabel(s: number): string {
   return "🔴 Difficile";
 }
 
-const EMPTY: Habitude = {
-  date: new Date().toISOString().split("T")[0],
-  sommeil: null, eau: null, meditation: null, lecture: null,
-  sport_fait: 0, alcool: 0, ecran_dodo: 0, nofap: 0,
-  brossage_matin: 0, brossage_soir: 0, gratte_langue: 0,
-  fil_dentaire: 0, creme_solaire: 0, soin_peau_soir: 0,
-  humeur: null, energie: null, notes: "",
-};
+function daysAgo(dateStr: string): number {
+  const d = new Date(dateStr + "T00:00:00");
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return Math.round((now.getTime() - d.getTime()) / 86400000);
+}
+
+function lastDoneLabel(history: HistValue[], habitId: number, doneToday: boolean): string {
+  if (doneToday) return "Aujourd'hui";
+  const done = history
+    .filter((h) => h.habit_id === habitId && !!h.valeur)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  if (!done.length) return "Jamais (35j)";
+  const days = daysAgo(done[0].date);
+  if (days <= 0) return "Aujourd'hui";
+  if (days === 1) return "Hier";
+  return `Il y a ${days}j`;
+}
+
+const EMPTY_FORM = { label: "", emoji: "", unite: "", cible: "", target_freq: "", score_impact: "aucun" as ScoreImpact };
 
 export default function HabitudesPage() {
-  const [today, setToday] = useState<Habitude>({ ...EMPTY });
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [defs, setDefs] = useState<HabitDef[]>([]);
+  const [valuesToday, setValuesToday] = useState<Record<number, number | null>>({});
+  const [history, setHistory] = useState<HistValue[]>([]);
+  const [journal, setJournal] = useState<Journal>({ humeur: null, energie: null, notes: "" });
   const [saved, setSaved] = useState(false);
 
+  const [addingSection, setAddingSection] = useState<Section | null>(null);
+  const [editingDef, setEditingDef] = useState<HabitDef | null>(null);
+
   const todayStr = new Date().toISOString().split("T")[0];
-  const score = calcScore(today);
 
-  const loadToday = useCallback(async () => {
-    const r = await fetch(`/api/habitudes?date=${todayStr}`);
-    const data = await r.json();
-    if (data) setToday({ ...EMPTY, ...data });
-  }, [todayStr]);
-
-  const loadHistory = useCallback(async () => {
-    const r = await fetch("/api/habitudes?days=35");
-    const rows: Habitude[] = await r.json();
-    setHistory(rows.map((h) => ({ date: h.date, score: calcScore(h) })));
+  const loadDefs = useCallback(() => {
+    fetch("/api/habit-definitions").then((r) => r.json()).then(setDefs);
   }, []);
 
-  useEffect(() => {
-    loadToday();
-    loadHistory();
-  }, [loadToday, loadHistory]);
+  const loadValuesToday = useCallback(() => {
+    fetch(`/api/habit-values?date=${todayStr}`)
+      .then((r) => r.json())
+      .then((rows: { habit_id: number; valeur: number | null }[]) => {
+        const map: Record<number, number | null> = {};
+        for (const r of rows) map[r.habit_id] = r.valeur;
+        setValuesToday(map);
+      });
+  }, [todayStr]);
+
+  const loadHistory = useCallback(() => {
+    fetch("/api/habit-values?days=35").then((r) => r.json()).then(setHistory);
+  }, []);
+
+  const loadJournal = useCallback(() => {
+    fetch(`/api/habitudes?date=${todayStr}`)
+      .then((r) => r.json())
+      .then((data: { humeur?: number; energie?: number; notes?: string } | null) => {
+        setJournal(data ? { humeur: data.humeur ?? null, energie: data.energie ?? null, notes: data.notes ?? "" } : { humeur: null, energie: null, notes: "" });
+      });
+  }, [todayStr]);
+
+  useEffect(() => { loadDefs(); loadHistory(); }, [loadDefs, loadHistory]);
+  useEffect(() => { loadValuesToday(); loadJournal(); }, [loadValuesToday, loadJournal]);
+
+  const score = calcScore(defs, valuesToday);
+
+  const setNum = (habitId: number, v: string) =>
+    setValuesToday((p) => ({ ...p, [habitId]: v === "" ? null : parseFloat(v) }));
+
+  const toggle = (habitId: number) =>
+    setValuesToday((p) => ({ ...p, [habitId]: p[habitId] ? 0 : 1 }));
 
   const save = async () => {
+    const values = defs.map((d) => ({
+      habit_id: d.id,
+      valeur: valuesToday[d.id] ?? (d.type === "checkbox" ? 0 : null),
+    }));
+    await fetch("/api/habit-values", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: todayStr, values }),
+    });
     await fetch("/api/habitudes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...today, date: todayStr }),
+      body: JSON.stringify({ date: todayStr, humeur: journal.humeur, energie: journal.energie, notes: journal.notes }),
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
     loadHistory();
   };
 
-  const num = (k: keyof Habitude, v: string) =>
-    setToday((p) => ({ ...p, [k]: v === "" ? null : parseFloat(v) }));
+  const createHabit = async (section: Section, type: "checkbox" | "metric", form: typeof EMPTY_FORM) => {
+    await fetch("/api/habit-definitions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        label: form.label, emoji: form.emoji || null, type, section,
+        unite: form.unite || null, cible: form.cible ? parseFloat(form.cible) : null,
+        target_freq: form.target_freq || null, score_impact: form.score_impact,
+      }),
+    });
+    setAddingSection(null);
+    loadDefs();
+  };
 
-  const bool = (k: keyof Habitude) =>
-    setToday((p) => ({ ...p, [k]: p[k] ? 0 : 1 }));
+  const updateHabit = async (id: number, form: typeof EMPTY_FORM) => {
+    await fetch(`/api/habit-definitions/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        label: form.label, emoji: form.emoji || null,
+        unite: form.unite || null, cible: form.cible ? parseFloat(form.cible) : null,
+        target_freq: form.target_freq || null, score_impact: form.score_impact,
+      }),
+    });
+    setEditingDef(null);
+    loadDefs();
+  };
 
-  // Build 35-day grid
+  const deleteHabit = async (id: number) => {
+    await fetch(`/api/habit-definitions/${id}`, { method: "DELETE" });
+    loadDefs();
+  };
+
+  const reorderHabits = async (ids: number[]) => {
+    setDefs((prev) => {
+      const idSet = new Set(ids);
+      const reordered = ids.map((id) => prev.find((d) => d.id === id)).filter((d): d is HabitDef => !!d);
+      let idx = 0;
+      return prev.map((d) => (idSet.has(d.id) ? reordered[idx++] : d));
+    });
+    await fetch("/api/habit-definitions/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    loadDefs();
+  };
+
+  const historyByDate = useMemo(() => {
+    const m = new Map<string, Record<number, number | null>>();
+    for (const h of history) {
+      if (!m.has(h.date)) m.set(h.date, {});
+      m.get(h.date)![h.habit_id] = h.valeur;
+    }
+    return m;
+  }, [history]);
+
   const gridDays: { date: string; score: number | null }[] = [];
   for (let i = 34; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const dateStr = d.toISOString().split("T")[0];
-    const entry = history.find((h) => h.date === dateStr);
-    gridDays.push({ date: dateStr, score: entry?.score ?? null });
+    const values = historyByDate.get(dateStr);
+    gridDays.push({ date: dateStr, score: values ? calcScore(defs, values) : null });
   }
 
   return (
@@ -128,130 +236,37 @@ export default function HabitudesPage() {
             {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
           </p>
         </div>
-        {/* Score display */}
         <div className="text-right">
           <p className="text-3xl font-bold text-zinc-100">{score}<span className="text-zinc-600 text-lg">/10</span></p>
           <p className="text-xs text-zinc-500 mt-0.5">{scoreLabel(score)}</p>
         </div>
       </div>
 
-      {/* Score bar */}
       <div className="progress-track h-2">
-        <div
-          className={`h-full rounded-full transition-all ${scoreColor(score)}`}
-          style={{ width: `${score * 10}%` }}
-        />
+        <div className={`h-full rounded-full transition-all ${scoreColor(score)}`} style={{ width: `${score * 10}%` }} />
       </div>
 
       {/* Form */}
       <div className="card space-y-5">
-        {/* Numbers row */}
-        <div>
-          <p className="section-label mb-3">Métriques</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <NumInput
-              label="😴 Sommeil"
-              sublabel="heures"
-              value={today.sommeil ?? ""}
-              onChange={(v) => num("sommeil", v)}
-              placeholder="7.5"
-              step="0.5"
-              highlight={(today.sommeil ?? 0) >= 7}
-            />
-            <NumInput
-              label="💧 Eau"
-              sublabel="litres"
-              value={today.eau ?? ""}
-              onChange={(v) => num("eau", v)}
-              placeholder="2"
-              step="0.25"
-              highlight={(today.eau ?? 0) >= 2}
-            />
-            <NumInput
-              label="🧘 Méditation"
-              sublabel="minutes"
-              value={today.meditation ?? ""}
-              onChange={(v) => num("meditation", v)}
-              placeholder="10"
-              highlight={(today.meditation ?? 0) >= 10}
-            />
-            <NumInput
-              label="📚 Lecture"
-              sublabel="minutes"
-              value={today.lecture ?? ""}
-              onChange={(v) => num("lecture", v)}
-              placeholder="20"
-              highlight={(today.lecture ?? 0) >= 20}
-            />
-          </div>
-        </div>
-
-        {/* Checkboxes */}
-        <div>
-          <p className="section-label mb-3">Check-list</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <CheckItem
-              label="🏋️ Sport fait"
-              checked={!!today.sport_fait}
-              onChange={() => bool("sport_fait")}
-              positive
-            />
-            <CheckItem
-              label="🔒 Nofap"
-              checked={!!today.nofap}
-              onChange={() => bool("nofap")}
-              positive
-            />
-            <CheckItem
-              label="🍷 Alcool"
-              checked={!!today.alcool}
-              onChange={() => bool("alcool")}
-              positive={false}
-            />
-            <CheckItem
-              label="📱 Écran avant dodo"
-              checked={!!today.ecran_dodo}
-              onChange={() => bool("ecran_dodo")}
-              positive={false}
-            />
-          </div>
-        </div>
-
-        {/* Hygiène */}
-        <div>
-          {(() => {
-            const hygieneItems = [
-              { key: "brossage_matin", label: "🪥 Brossage matin" },
-              { key: "brossage_soir",  label: "🌙 Brossage soir" },
-              { key: "gratte_langue",  label: "👅 Gratte-langue" },
-              { key: "fil_dentaire",   label: "🦷 Fil dentaire" },
-              { key: "creme_solaire",  label: "☀️ Crème solaire" },
-              { key: "soin_peau_soir", label: "🧴 Soin peau soir" },
-            ] as const;
-            const done = hygieneItems.filter((i) => !!today[i.key]).length;
-            return (
-              <>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="section-label">Hygiène</p>
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${done === hygieneItems.length ? "bg-emerald-500/20 text-emerald-400" : "bg-zinc-800 text-zinc-500"}`}>
-                    {done}/{hygieneItems.length}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {hygieneItems.map((item) => (
-                    <CheckItem
-                      key={item.key}
-                      label={item.label}
-                      checked={!!today[item.key]}
-                      onChange={() => bool(item.key)}
-                      positive
-                    />
-                  ))}
-                </div>
-              </>
-            );
-          })()}
-        </div>
+        {SECTIONS.map((s) => (
+          <HabitSection
+            key={s.key}
+            section={s.key}
+            title={s.title}
+            defs={defs.filter((d) => d.section === s.key)}
+            valuesToday={valuesToday}
+            history={history}
+            onToggle={toggle}
+            onNum={setNum}
+            onEdit={setEditingDef}
+            onDelete={deleteHabit}
+            onReorder={reorderHabits}
+            adding={addingSection === s.key}
+            onAddClick={() => setAddingSection(s.key)}
+            onAddCancel={() => setAddingSection(null)}
+            onAddSubmit={(form) => createHabit(s.key, s.key === "metriques" ? "metric" : "checkbox", form)}
+          />
+        ))}
 
         {/* Mood / Energy */}
         <div>
@@ -259,14 +274,14 @@ export default function HabitudesPage() {
           <div className="grid grid-cols-2 gap-4">
             <SliderInput
               label="😊 Humeur"
-              value={today.humeur ?? 3}
-              onChange={(v) => setToday((p) => ({ ...p, humeur: v }))}
+              value={journal.humeur ?? 3}
+              onChange={(v) => setJournal((p) => ({ ...p, humeur: v }))}
               labels={["😞", "😐", "🙂", "😊", "😄"]}
             />
             <SliderInput
               label="⚡ Énergie"
-              value={today.energie ?? 3}
-              onChange={(v) => setToday((p) => ({ ...p, energie: v }))}
+              value={journal.energie ?? 3}
+              onChange={(v) => setJournal((p) => ({ ...p, energie: v }))}
               labels={["😴", "🥱", "😐", "💪", "⚡"]}
             />
           </div>
@@ -279,12 +294,11 @@ export default function HabitudesPage() {
             className="input"
             rows={3}
             placeholder="Comment s'est passée cette journée ?"
-            value={today.notes}
-            onChange={(e) => setToday((p) => ({ ...p, notes: e.target.value }))}
+            value={journal.notes}
+            onChange={(e) => setJournal((p) => ({ ...p, notes: e.target.value }))}
           />
         </div>
 
-        {/* Save */}
         <button onClick={save} className={`btn-primary w-full flex items-center justify-center gap-2 ${saved ? "bg-emerald-600 hover:bg-emerald-500" : ""}`}>
           <Save size={15} />
           {saved ? "Sauvegardé !" : "Sauvegarder"}
@@ -327,11 +341,216 @@ export default function HabitudesPage() {
           </div>
         </div>
       </div>
+
+      {editingDef && (
+        <HabitFormModal
+          title={`Modifier « ${editingDef.label} »`}
+          type={editingDef.type}
+          section={editingDef.section}
+          initial={{
+            label: editingDef.label, emoji: editingDef.emoji ?? "",
+            unite: editingDef.unite ?? "", cible: editingDef.cible?.toString() ?? "",
+            target_freq: editingDef.target_freq ?? "", score_impact: editingDef.score_impact,
+          }}
+          onSubmit={(form) => updateHabit(editingDef.id, form)}
+          onCancel={() => setEditingDef(null)}
+        />
+      )}
     </div>
   );
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+function HabitSection({
+  section, title, defs, valuesToday, history, onToggle, onNum, onEdit, onDelete, onReorder,
+  adding, onAddClick, onAddCancel, onAddSubmit,
+}: {
+  section: Section; title: string; defs: HabitDef[];
+  valuesToday: Record<number, number | null>; history: HistValue[];
+  onToggle: (id: number) => void; onNum: (id: number, v: string) => void;
+  onEdit: (d: HabitDef) => void; onDelete: (id: number) => void;
+  onReorder: (ids: number[]) => void;
+  adding: boolean; onAddClick: () => void; onAddCancel: () => void;
+  onAddSubmit: (form: typeof EMPTY_FORM) => void;
+}) {
+  const isMetriques = section === "metriques";
+  const done = !isMetriques ? defs.filter((d) => !!valuesToday[d.id]).length : 0;
+
+  const handleDrop = (e: React.DragEvent, targetId: number) => {
+    e.preventDefault();
+    const draggedId = Number(e.dataTransfer.getData("text/plain"));
+    if (!draggedId || draggedId === targetId) return;
+    const ids = defs.map((d) => d.id);
+    const fromIdx = ids.indexOf(draggedId);
+    const toIdx = ids.indexOf(targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    ids.splice(fromIdx, 1);
+    ids.splice(toIdx, 0, draggedId);
+    onReorder(ids);
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <p className="section-label">{title}</p>
+        <div className="flex items-center gap-2">
+          {!isMetriques && defs.length > 0 && (
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${done === defs.length ? "bg-emerald-500/20 text-emerald-400" : "bg-zinc-800 text-zinc-500"}`}>
+              {done}/{defs.length}
+            </span>
+          )}
+          <button onClick={onAddClick} className="text-zinc-600 hover:text-violet-500 transition-colors p-0.5">
+            <Plus size={14} />
+          </button>
+        </div>
+      </div>
+
+      {adding && (
+        <div className="mb-3">
+          <HabitFormInline type={isMetriques ? "metric" : "checkbox"} section={section} onSubmit={onAddSubmit} onCancel={onAddCancel} />
+        </div>
+      )}
+
+      {defs.length === 0 && !adding ? (
+        <p className="text-xs text-zinc-600">Aucun item — clique sur + pour en ajouter un</p>
+      ) : isMetriques ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {defs.map((d) => (
+            <div
+              key={d.id}
+              className="relative group cursor-grab active:cursor-grabbing"
+              draggable
+              onDragStart={(e) => e.dataTransfer.setData("text/plain", String(d.id))}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => handleDrop(e, d.id)}
+            >
+              <NumInput
+                label={d.emoji ? `${d.emoji} ${d.label}` : d.label}
+                sublabel={d.unite ?? ""}
+                value={valuesToday[d.id] ?? ""}
+                onChange={(v) => onNum(d.id, v)}
+                placeholder={d.cible?.toString() ?? "0"}
+                highlight={d.cible != null && (valuesToday[d.id] ?? 0) >= d.cible}
+              />
+              <ItemActions onEdit={() => onEdit(d)} onDelete={() => onDelete(d.id)} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {defs.map((d) => {
+            const last = section === "ponctuel" ? lastDoneLabel(history, d.id, !!valuesToday[d.id]) : undefined;
+            const sublabel = last && d.target_freq ? `${last} · cible ${d.target_freq}` : last;
+            return (
+              <div
+                key={d.id}
+                className="relative group cursor-grab active:cursor-grabbing"
+                draggable
+                onDragStart={(e) => e.dataTransfer.setData("text/plain", String(d.id))}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => handleDrop(e, d.id)}
+              >
+                <CheckItem
+                  label={d.emoji ? `${d.emoji} ${d.label}` : d.label}
+                  checked={!!valuesToday[d.id]}
+                  onChange={() => onToggle(d.id)}
+                  positive={d.score_impact !== "negatif"}
+                  sublabel={sublabel}
+                />
+                <ItemActions onEdit={() => onEdit(d)} onDelete={() => onDelete(d.id)} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ItemActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+  return (
+    <div className="absolute top-1 right-1 flex items-center gap-0.5">
+      <div className="text-zinc-400/70 group-hover:text-zinc-500 transition-colors p-1 pointer-events-none">
+        <GripVertical size={11} />
+      </div>
+      <button onClick={onEdit} className="p-1 rounded bg-white/90 text-zinc-500 hover:text-violet-600 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
+        <Pencil size={10} />
+      </button>
+      <button onClick={onDelete} className="p-1 rounded bg-white/90 text-zinc-500 hover:text-red-500 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
+        <Trash2 size={10} />
+      </button>
+    </div>
+  );
+}
+
+function HabitFormInline({ type, section, initial, onSubmit, onCancel }: {
+  type: "checkbox" | "metric"; section: Section; initial?: typeof EMPTY_FORM;
+  onSubmit: (form: typeof EMPTY_FORM) => void; onCancel: () => void;
+}) {
+  const [form, setForm] = useState(initial ?? EMPTY_FORM);
+  return (
+    <form
+      onSubmit={(e) => { e.preventDefault(); if (form.label.trim()) onSubmit(form); }}
+      className="flex items-end gap-3 flex-wrap p-3 rounded-lg border border-zinc-800"
+    >
+      <div>
+        <label className="text-xs text-zinc-500 mb-1 block">Nom</label>
+        <input className="input py-1.5 text-sm w-40" value={form.label}
+          onChange={(e) => setForm((p) => ({ ...p, label: e.target.value }))} required />
+      </div>
+      <div>
+        <label className="text-xs text-zinc-500 mb-1 block">Emoji</label>
+        <input className="input py-1.5 text-sm w-16 text-center" placeholder="✨" value={form.emoji}
+          onChange={(e) => setForm((p) => ({ ...p, emoji: e.target.value }))} />
+      </div>
+      {type === "metric" && (
+        <>
+          <div>
+            <label className="text-xs text-zinc-500 mb-1 block">Unité</label>
+            <input className="input py-1.5 text-sm w-24" placeholder="minutes" value={form.unite}
+              onChange={(e) => setForm((p) => ({ ...p, unite: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-xs text-zinc-500 mb-1 block">Cible</label>
+            <input type="number" className="input py-1.5 text-sm w-20" value={form.cible}
+              onChange={(e) => setForm((p) => ({ ...p, cible: e.target.value }))} />
+          </div>
+        </>
+      )}
+      {type === "checkbox" && section === "ponctuel" && (
+        <div>
+          <label className="text-xs text-zinc-500 mb-1 block">Fréquence cible</label>
+          <input className="input py-1.5 text-sm w-32" placeholder="2x/semaine" value={form.target_freq}
+            onChange={(e) => setForm((p) => ({ ...p, target_freq: e.target.value }))} />
+        </div>
+      )}
+      <div>
+        <label className="text-xs text-zinc-500 mb-1 block">Impact score</label>
+        <select className="select py-1.5 text-sm" value={form.score_impact}
+          onChange={(e) => setForm((p) => ({ ...p, score_impact: e.target.value as ScoreImpact }))}>
+          <option value="aucun">Aucun</option>
+          <option value="positif">Positif</option>
+          <option value="negatif">Négatif</option>
+        </select>
+      </div>
+      <button type="submit" className="btn-primary py-1.5 px-3 text-xs">{initial ? "Enregistrer" : "Ajouter"}</button>
+      <button type="button" onClick={onCancel} className="btn-ghost py-1.5 px-2 text-xs">Annuler</button>
+    </form>
+  );
+}
+
+function HabitFormModal(props: { title: string } & Parameters<typeof HabitFormInline>[0]) {
+  const { title, ...rest } = props;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={rest.onCancel}>
+      <div className="card w-fit max-w-2xl space-y-3" onClick={(e) => e.stopPropagation()}>
+        <p className="text-sm font-medium text-zinc-200">{title}</p>
+        <HabitFormInline {...rest} />
+      </div>
+    </div>
+  );
+}
 
 function NumInput({ label, sublabel, value, onChange, placeholder, step = "1", highlight }: {
   label: string; sublabel: string; value: number | string;
@@ -354,8 +573,8 @@ function NumInput({ label, sublabel, value, onChange, placeholder, step = "1", h
   );
 }
 
-function CheckItem({ label, checked, onChange, positive }: {
-  label: string; checked: boolean; onChange: () => void; positive: boolean;
+function CheckItem({ label, checked, onChange, positive, sublabel }: {
+  label: string; checked: boolean; onChange: () => void; positive: boolean; sublabel?: string;
 }) {
   const activeClass = positive
     ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-300"
@@ -375,7 +594,10 @@ function CheckItem({ label, checked, onChange, positive }: {
       }`}>
         {checked && <span className="text-white text-xs">✓</span>}
       </div>
-      <span className="text-sm">{label}</span>
+      <div className="min-w-0">
+        <span className="text-sm block truncate">{label}</span>
+        {sublabel && <span className="text-[10px] text-zinc-600 block">{sublabel}</span>}
+      </div>
     </button>
   );
 }

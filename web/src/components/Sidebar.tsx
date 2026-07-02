@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Inbox, Target, CheckSquare,
-  Dumbbell, Apple, Heart, Film, CreditCard, Brain,
+  Dumbbell, Apple, Heart, Film, CreditCard, Brain, HeartHandshake, CalendarClock, ShoppingCart,
 } from "lucide-react";
 
 const nav = [
@@ -20,6 +20,7 @@ const nav = [
     items: [
       { href: "/projets",  label: "Projets",       icon: Target },
       { href: "/taches",   label: "Tâches",        icon: CheckSquare },
+      { href: "/planning", label: "Planning",      icon: CalendarClock },
     ],
   },
   {
@@ -33,6 +34,8 @@ const nav = [
   {
     group: "vivre", label: "Vivre",
     items: [
+      { href: "/psy",           label: "Psy TCC",      icon: HeartHandshake },
+      { href: "/courses",      label: "Courses",      icon: ShoppingCart },
       { href: "/media",        label: "Médiathèque",  icon: Film },
       { href: "/abonnements",  label: "Abonnements",  icon: CreditCard },
     ],

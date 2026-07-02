@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   let query = `SELECT t.*, p.titre as projet_titre
                FROM taches t LEFT JOIN projets p ON p.id = t.projet_id
                WHERE 1=1`;
-  const args: unknown[] = [];
+  const args: (string | number)[] = [];
 
   if (projet_id) { query += " AND t.projet_id = ?"; args.push(projet_id); }
   if (date)      { query += " AND t.date_echeance = ?"; args.push(date); }

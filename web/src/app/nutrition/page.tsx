@@ -14,6 +14,7 @@ interface Nutrition {
   lipides: number | null;
   notes: string | null;
   pdf_path: string | null;
+  day_type: string | null;
 }
 
 function todayStr() {
@@ -67,7 +68,7 @@ export default function NutritionPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [planPdf, setPlanPdf] = useState<string | null>(null);
   const [targets, setTargets] = useState<NutritionTargets | null>(null);
-  const [dayType, setDayType] = useState<"repos" | "standard" | "intensif">("standard");
+  const [dayType, setDayType] = useState<"repos" | "intensif">("repos");
   const activeTargets: DayTargets | null = targets ? targets[dayType] : null;
   const [history, setHistory] = useState<Nutrition[]>([]);
   const [saved, setSaved] = useState(false);
@@ -84,8 +85,10 @@ export default function NutritionPage() {
         lipides: data.lipides?.toString() ?? "",
         notes: data.notes ?? "",
       });
+      setDayType(data.day_type === "intensif" ? "intensif" : "repos");
     } else {
       setForm(EMPTY_FORM);
+      setDayType("repos");
     }
   }, [date]);
 
@@ -120,7 +123,7 @@ export default function NutritionPage() {
   const f = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
   const save = async () => {
-    const body: Record<string, unknown> = { date };
+    const body: Record<string, unknown> = { date, day_type: dayType };
     if (form.calories) body.calories = parseInt(form.calories);
     if (form.proteines) body.proteines = parseFloat(form.proteines);
     if (form.glucides) body.glucides = parseFloat(form.glucides);
@@ -214,7 +217,6 @@ export default function NutritionPage() {
           <div className="flex gap-1.5 p-1 rounded-lg" style={{ backgroundColor: "#f0eeeb" }}>
             {([
               { key: "repos",    emoji: "😴", label: "Repos" },
-              { key: "standard", emoji: "⚖️", label: "Standard" },
               { key: "intensif", emoji: "🏋️", label: "Entraînement" },
             ] as const).map(({ key, emoji, label }) => (
               <button

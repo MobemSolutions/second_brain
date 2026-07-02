@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     .get(body.date) as { id: number } | undefined;
 
   if (existing) {
-    const allowed = ["calories", "proteines", "glucides", "lipides", "notes", "pdf_path"];
+    const allowed = ["calories", "proteines", "glucides", "lipides", "notes", "pdf_path", "day_type"];
     const fields = Object.keys(body).filter((k) => allowed.includes(k));
     if (fields.length) {
       const set = fields.map((f) => `${f} = ?`).join(", ");
@@ -43,8 +43,8 @@ export async function POST(req: NextRequest) {
 
   const result = db
     .prepare(
-      `INSERT INTO nutrition (date, calories, proteines, glucides, lipides, notes, pdf_path)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO nutrition (date, calories, proteines, glucides, lipides, notes, pdf_path, day_type)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       body.date,
@@ -53,7 +53,8 @@ export async function POST(req: NextRequest) {
       body.glucides ?? null,
       body.lipides ?? null,
       body.notes || null,
-      body.pdf_path || null
+      body.pdf_path || null,
+      body.day_type || null
     );
 
   const row = db.prepare("SELECT * FROM nutrition WHERE id = ?").get(Number(result.lastInsertRowid));

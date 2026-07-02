@@ -232,7 +232,6 @@ export default function NutritionCalculator({
 
   const DAY_COLS = [
     { key: "repos",    emoji: "😴", label: "Repos",          extra: "−300 kcal", extraCls: "text-blue-500" },
-    { key: "standard", emoji: "⚖️", label: "Standard",       extra: "base",      extraCls: "text-violet-500" },
     { key: "intensif", emoji: "🏋️", label: "Entraînement",   extra: "+350 kcal", extraCls: "text-emerald-500" },
   ] as const;
 
@@ -246,7 +245,7 @@ export default function NutritionCalculator({
         <span className="text-sm font-medium shrink-0" style={{ color: "#2c2c2a" }}>Objectifs nutritionnels</span>
         {savedTargets ? (
           <span className="flex-1 text-xs truncate" style={{ color: "#9c9c9a" }}>
-            ⚖️ {savedTargets.standard.calories} kcal · P {savedTargets.standard.proteines}g · G {savedTargets.standard.glucides}g · L {savedTargets.standard.lipides}g
+            🏋️ {savedTargets.intensif.calories} kcal · P {savedTargets.intensif.proteines}g · G {savedTargets.intensif.glucides}g · L {savedTargets.intensif.lipides}g
           </span>
         ) : (
           <span className="flex-1 text-xs" style={{ color: "#bcbcba" }}>Non définis — calculer tes macros</span>
@@ -404,28 +403,24 @@ export default function NutritionCalculator({
                 )}
               </div>
 
-              {/* 3 day-type columns */}
-              <div className="grid grid-cols-3 gap-2">
+              {/* 2 day-type columns */}
+              <div className="grid grid-cols-2 gap-2">
                 {DAY_COLS.map(({ key, emoji, label, extra, extraCls }) => {
                   const day = calc[key];
                   const totalKcal = day.proteines * 4 + day.glucides * 4 + day.lipides * 9;
-                  const isStd = key === "standard";
                   return (
                     <div
                       key={key}
                       className="rounded-lg p-3"
-                      style={{
-                        border: `1px solid ${isStd ? "rgba(109,40,217,0.3)" : "#e4e2de"}`,
-                        backgroundColor: isStd ? "rgba(109,40,217,0.06)" : "#fafaf9",
-                      }}
+                      style={{ border: "1px solid #e4e2de", backgroundColor: "#fafaf9" }}
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium" style={{ color: isStd ? "#6d28d9" : "#7a7a78" }}>
+                        <span className="text-xs font-medium" style={{ color: "#7a7a78" }}>
                           {emoji} {label}
                         </span>
                         <span className={`text-[10px] font-medium ${extraCls}`}>{extra}</span>
                       </div>
-                      <p className="text-2xl font-bold leading-none" style={{ color: isStd ? "#6d28d9" : "#1a1a18" }}>
+                      <p className="text-2xl font-bold leading-none" style={{ color: "#1a1a18" }}>
                         {day.calories}
                       </p>
                       <p className="text-[10px] mb-3" style={{ color: "#b0aea9" }}>kcal</p>
