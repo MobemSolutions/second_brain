@@ -79,17 +79,20 @@ function parseIcal(text: string): IcalEvent[] {
 }
 
 export async function GET(req: NextRequest) {
-  const url = req.nextUrl.searchParams.get("url");
-  if (!url) return NextResponse.json({ error: "Missing url" }, { status: 400 });
+  const rawUrl = req.nextUrl.searchParams.get("url");
+  if (!rawUrl) return NextResponse.json([]);
+
+  // webcal:// is just an alias for https:// on real ical feeds (e.g. Apple Calendar share links)
+  const url = rawUrl.replace(/^webcal:\/\//i, "https://");
 
   // Basic URL validation — only allow http/https
   try {
     const parsed = new URL(url);
     if (!["http:", "https:"].includes(parsed.protocol)) {
-      return NextResponse.json({ error: "Invalid protocol" }, { status: 400 });
+      return NextResponse.json([]);
     }
   } catch {
-    return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
+    return NextResponse.json([]);
   }
 
   try {

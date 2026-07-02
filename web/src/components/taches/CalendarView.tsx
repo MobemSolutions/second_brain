@@ -59,8 +59,8 @@ export default function CalendarView({ taches, onAdd }: SharedViewProps & { onAd
     setLoadingApple(true);
     fetch(`/api/ical-proxy?url=${encodeURIComponent(appleSaved)}`)
       .then((r) => r.json())
-      .then((events: { date: string; title: string }[]) => setAppleEvents(events))
-      .catch(() => {})
+      .then((events: { date: string; title: string }[]) => setAppleEvents(Array.isArray(events) ? events : []))
+      .catch(() => setAppleEvents([]))
       .finally(() => setLoadingApple(false));
   }, [appleSaved]);
 
