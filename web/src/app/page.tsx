@@ -54,6 +54,7 @@ interface Stats {
 const DISC_ICON: Record<string, string> = {
   musculation: "💪",
   running: "🏃",
+  natation: "🏊",
   escalade: "🧗",
   alpinisme: "🏔️",
 };

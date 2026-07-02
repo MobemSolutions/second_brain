@@ -19,6 +19,7 @@ interface Session {
   type_course?: string;
   distance?: number;
   temps_min?: number;
+  fc_moyenne?: number;
   cotation?: string;
   resultat?: string;
   site?: string;
@@ -29,14 +30,17 @@ interface Session {
   pdf_path?: string;
 }
 
-type Disc = "musculation" | "running" | "escalade" | "alpinisme";
+type Disc = "musculation" | "running" | "natation" | "escalade" | "alpinisme";
 
 const TABS: { id: Disc; label: string; icon: string }[] = [
   { id: "musculation", label: "Musculation", icon: "💪" },
   { id: "running", label: "Running", icon: "🏃" },
+  { id: "natation", label: "Natation", icon: "🏊" },
   { id: "escalade", label: "Escalade", icon: "🧗" },
   { id: "alpinisme", label: "Alpinisme", icon: "🏔️" },
 ];
+
+const NAGES = ["Crawl", "Dos", "Brasse", "Papillon", "4 Nages"];
 
 const GROUPES = ["Dos", "Pectoraux", "Épaules", "Biceps", "Triceps", "Jambes", "Abdos", "Full body"];
 const COTATIONS = ["4", "4+", "5a", "5b", "5c", "6a", "6a+", "6b", "6b+", "6c", "6c+", "7a", "7a+", "7b", "7b+", "7c", "7c+", "8a"];
@@ -50,6 +54,14 @@ function pace(dist: number, timeMin: number): string {
   const m = Math.floor(secPerKm / 60);
   const s = Math.round(secPerKm % 60);
   return `${m}:${String(s).padStart(2, "0")} /km`;
+}
+
+function pace100(distM: number, timeMin: number): string {
+  if (!distM || !timeMin) return "—";
+  const secPer100 = (timeMin * 60) / (distM / 100);
+  const m = Math.floor(secPer100 / 60);
+  const s = Math.round(secPer100 % 60);
+  return `${m}:${String(s).padStart(2, "0")} /100m`;
 }
 
 function volume(series?: number, reps?: number, charge?: number): number | null {
@@ -67,7 +79,7 @@ export default function SportPage() {
     date: new Date().toISOString().split("T")[0],
     duree: "", rpe: "", meteo: "", notes: "",
     groupe_musculaire: "", exercice: "", series: "", repetitions: "", charge: "", programme: "",
-    type_course: "", distance: "", temps_min: "",
+    type_course: "", distance: "", temps_min: "", fc_moyenne: "",
     site: "", voie: "", cotation: "", style_escalade: "Bloc", resultat: "",
     sommet: "", massif: "", altitude: "", cotation_globale: "", partenaires: "",
   });
@@ -133,12 +145,12 @@ export default function SportPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-zinc-900 rounded-xl p-1 border border-zinc-800 w-fit">
+      <div className="flex gap-1 bg-zinc-900 rounded-xl p-1 border border-zinc-800 w-full sm:w-fit overflow-x-auto">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => { setTab(t.id); setShowForm(false); }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors shrink-0 ${
               tab === t.id ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"
             }`}
           >
@@ -273,6 +285,35 @@ export default function SportPage() {
             </div>
           )}
 
+          {/* Natation */}
+          {tab === "natation" && (
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Nage</label>
+                <select className="select" value={form.type_course as string}
+                  onChange={(e) => f("type_course", e.target.value)}>
+                  <option value="">—</option>
+                  {NAGES.map((n) => <option key={n}>{n}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Distance (m)</label>
+                <input type="number" step="50" className="input" placeholder="1000" value={form.distance as string}
+                  onChange={(e) => f("distance", e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Temps (min)</label>
+                <input type="number" step="0.5" className="input" placeholder="30" value={form.temps_min as string}
+                  onChange={(e) => f("temps_min", e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">FC moyenne (bpm)</label>
+                <input type="number" className="input" placeholder="140" value={form.fc_moyenne as string}
+                  onChange={(e) => f("fc_moyenne", e.target.value)} />
+              </div>
+            </div>
+          )}
+
           {/* Escalade */}
           {tab === "escalade" && (
             <div className="grid grid-cols-2 gap-3">
@@ -402,6 +443,17 @@ export default function SportPage() {
                     </p>
                     <p className="text-xs text-zinc-500 mt-0.5">
                       Allure : {s.distance && s.temps_min ? pace(s.distance, s.temps_min) : "—"}
+                    </p>
+                  </>
+                )}
+                {tab === "natation" && (
+                  <>
+                    <p className="text-sm text-zinc-200">
+                      {s.type_course || "Natation"} · {s.distance ? `${s.distance} m` : "—"}
+                    </p>
+                    <p className="text-xs text-zinc-500 mt-0.5">
+                      Allure : {s.distance && s.temps_min ? pace100(s.distance, s.temps_min) : "—"}
+                      {s.fc_moyenne && ` · FC moy. ${s.fc_moyenne} bpm`}
                     </p>
                   </>
                 )}
