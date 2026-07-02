@@ -154,11 +154,17 @@ export default function ProjetsPage() {
       </div>
 
       {/* Kanban */}
-      <div className="flex gap-4 overflow-x-auto pb-2">
+      {projets.length === 0 ? (
+        <div className="card text-center py-12">
+          <p className="text-zinc-500 text-sm">Aucun projet — crée-en un pour commencer</p>
+        </div>
+      ) : (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {COLONNES.map((col) => {
           const colProjets = projets.filter((p) => p.statut === col.id);
+          if (colProjets.length === 0) return null;
           return (
-            <div key={col.id} className="w-72 shrink-0">
+            <div key={col.id}>
               {/* Column header */}
               <div className="flex items-center gap-2 mb-3 px-1">
                 <span className={`text-xs font-semibold ${col.color}`}>{col.label}</span>
@@ -177,13 +183,13 @@ export default function ProjetsPage() {
                   const isOpen = expanded === p.id;
 
                   return (
-                    <div key={p.id} className="card-sm hover:border-zinc-700 transition-colors">
+                    <div key={p.id} className="card-sm group hover:border-zinc-700 transition-colors">
                       {/* Card top */}
                       <div className="flex items-start justify-between gap-2 mb-3">
                         <p className="text-sm font-medium text-zinc-100 leading-snug flex-1">{p.titre}</p>
                         <button
                           onClick={() => deleteProjet(p.id)}
-                          className="shrink-0 text-zinc-700 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 p-0.5"
+                          className="shrink-0 text-zinc-700 hover:text-red-400 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-0.5"
                         >
                           <Trash2 size={12} />
                         </button>
@@ -261,7 +267,7 @@ export default function ProjetsPage() {
                                 </span>
                                 <button
                                   onClick={() => deleteTache(t.id)}
-                                  className="text-zinc-700 hover:text-red-400 opacity-0 group-hover/task:opacity-100 transition-all"
+                                  className="text-zinc-700 hover:text-red-400 opacity-100 sm:opacity-0 sm:group-hover/task:opacity-100 transition-all"
                                 >
                                   <Trash2 size={11} />
                                 </button>
@@ -278,6 +284,7 @@ export default function ProjetsPage() {
           );
         })}
       </div>
+      )}
 
       {/* Modal Projet */}
       {modal === "projet" && (

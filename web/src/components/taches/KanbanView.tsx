@@ -111,7 +111,7 @@ export default function KanbanView({ taches, projets, onDelete, onMove, onRefres
                     <div className="flex items-start gap-1.5 mb-2">
                       <GripVertical size={12} style={{ color: "#d0ceca", marginTop: "2px", flexShrink: 0 }} />
                       <p className="text-sm flex-1 leading-snug" style={{ color: t.statut === "termine" ? "#b0aea9" : "#1a1a18", textDecoration: t.statut === "termine" ? "line-through" : "none" }}>{t.titre}</p>
-                      <button onClick={() => onDelete(t.id)} style={{ flexShrink: 0, color: "#d0ceca", padding: "2px", opacity: 0, transition: "opacity 0.1s" }} className="group-hover:!opacity-100"
+                      <button onClick={() => onDelete(t.id)} style={{ flexShrink: 0, color: "#d0ceca", padding: "2px", transition: "opacity 0.1s, color 0.1s" }} className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                         onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#d0ceca")}>
                         <Trash2 size={12} />
                       </button>
