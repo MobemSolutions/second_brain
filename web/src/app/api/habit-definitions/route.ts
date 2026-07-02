@@ -13,26 +13,26 @@ function slugify(label: string): string {
 }
 
 export async function GET() {
-  const db = getDb();
-  const rows = db
+  const db = await getDb();
+  const rows = await db
     .prepare("SELECT * FROM habit_definitions WHERE actif = 1 ORDER BY section, ordre, id")
     .all();
   return NextResponse.json(rows);
 }
 
 export async function POST(req: NextRequest) {
-  const db = getDb();
+  const db = await getDb();
   const b = await req.json();
 
   let cle = slugify(b.label);
-  const existing = db.prepare("SELECT id FROM habit_definitions WHERE cle = ?").get(cle);
+  const existing = await db.prepare("SELECT id FROM habit_definitions WHERE cle = ?").get(cle);
   if (existing) cle = `${cle}_${Date.now()}`;
 
-  const maxOrdre = db
+  const maxOrdre = await db
     .prepare("SELECT COALESCE(MAX(ordre), -1) AS m FROM habit_definitions WHERE section = ?")
     .get(b.section) as { m: number };
 
-  const result = db
+  const result = await db
     .prepare(
       `INSERT INTO habit_definitions (cle, label, emoji, type, section, unite, cible, target_freq, score_impact, ordre)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -50,6 +50,6 @@ export async function POST(req: NextRequest) {
       maxOrdre.m + 1
     );
 
-  const row = db.prepare("SELECT * FROM habit_definitions WHERE id = ?").get(Number(result.lastInsertRowid));
+  const row = await db.prepare("SELECT * FROM habit_definitions WHERE id = ?").get(Number(result.lastInsertRowid));
   return NextResponse.json(row, { status: 201 });
 }

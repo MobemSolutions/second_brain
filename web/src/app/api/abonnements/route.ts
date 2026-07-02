@@ -4,8 +4,8 @@ import { getDb } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const db = getDb();
-  const rows = db
+  const db = await getDb();
+  const rows = await db
     .prepare(
       `SELECT *,
          CASE frequence
@@ -22,10 +22,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const db = getDb();
+  const db = await getDb();
   const body = await req.json();
 
-  const result = db
+  const result = await db
     .prepare(
       `INSERT INTO abonnements (service, categorie, prix, frequence, date_renouvellement, auto_renouvellement, valeur_percue, actif, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -42,6 +42,6 @@ export async function POST(req: NextRequest) {
       body.notes || null
     );
 
-  const row = db.prepare("SELECT * FROM abonnements WHERE id = ?").get(Number(result.lastInsertRowid));
+  const row = await db.prepare("SELECT * FROM abonnements WHERE id = ?").get(Number(result.lastInsertRowid));
   return NextResponse.json(row, { status: 201 });
 }

@@ -4,7 +4,7 @@ import { getDb } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const db = getDb();
+  const db = await getDb();
   const projet_id = req.nextUrl.searchParams.get("projet_id");
   const date = req.nextUrl.searchParams.get("date");
 
@@ -19,14 +19,14 @@ export async function GET(req: NextRequest) {
   query += ` ORDER BY CASE t.statut WHEN 'en_cours' THEN 1 WHEN 'a_faire' THEN 2 ELSE 3 END,
              CASE t.priorite WHEN 'haute' THEN 1 WHEN 'moyenne' THEN 2 ELSE 3 END`;
 
-  return NextResponse.json(db.prepare(query).all(...args));
+  return NextResponse.json(await db.prepare(query).all(...args));
 }
 
 export async function POST(req: NextRequest) {
-  const db = getDb();
+  const db = await getDb();
   const body = await req.json();
 
-  const result = db
+  const result = await db
     .prepare(
       `INSERT INTO taches (titre, projet_id, statut, priorite, date_debut, date_echeance, duree_estimee, contexte, energie, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
       body.notes || null
     );
 
-  const row = db
+  const row = await db
     .prepare("SELECT * FROM taches WHERE id = ?")
     .get(Number(result.lastInsertRowid));
   return NextResponse.json(row, { status: 201 });

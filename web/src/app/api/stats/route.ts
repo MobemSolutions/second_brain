@@ -4,10 +4,10 @@ import { getDb } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const db = getDb();
+  const db = await getDb();
   const today = new Date().toISOString().split("T")[0];
 
-  const tasks_today = db
+  const tasks_today = await db
     .prepare(
       `SELECT t.*, p.titre as projet_titre
        FROM taches t
@@ -18,7 +18,7 @@ export async function GET() {
     )
     .all(today);
 
-  const active_projects = db
+  const active_projects = await db
     .prepare(
       `SELECT p.*,
          COUNT(t.id) as total_taches,
@@ -32,7 +32,7 @@ export async function GET() {
     )
     .all();
 
-  const habit_today = db
+  const habit_today = await db
     .prepare("SELECT * FROM habitudes WHERE date = ?")
     .get(today) as Record<string, unknown> | undefined;
 
@@ -50,7 +50,7 @@ export async function GET() {
   }
 
   const monthly_cost = (
-    db
+    await db
       .prepare(
         `SELECT COALESCE(SUM(
           CASE frequence
@@ -64,7 +64,7 @@ export async function GET() {
       .get() as { total: number }
   ).total;
 
-  const sub_alerts = db
+  const sub_alerts = await db
     .prepare(
       `SELECT *,
          CAST((julianday(date_renouvellement) - julianday('now')) AS INTEGER) as jours_restants
@@ -76,14 +76,14 @@ export async function GET() {
     )
     .all();
 
-  const recent_sport = db
+  const recent_sport = await db
     .prepare(
       `SELECT * FROM sport ORDER BY date DESC, created_at DESC LIMIT 5`
     )
     .all();
 
   const inbox_count = (
-    db
+    await db
       .prepare("SELECT COUNT(*) as n FROM inbox WHERE traite = 0")
       .get() as { n: number }
   ).n;

@@ -4,8 +4,8 @@ import { getDb } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const db = getDb();
-  const rows = db
+  const db = await getDb();
+  const rows = await db
     .prepare(
       `SELECT p.*,
          COUNT(t.id) as total_taches,
@@ -23,10 +23,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const db = getDb();
+  const db = await getDb();
   const body = await req.json();
 
-  const result = db
+  const result = await db
     .prepare(
       `INSERT INTO projets (titre, statut, priorite, piliers, date_debut, deadline, okr_trimestre, annee, notes, description, couleur)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
       body.couleur || null
     );
 
-  const row = db
+  const row = await db
     .prepare("SELECT * FROM projets WHERE id = ?")
     .get(Number(result.lastInsertRowid));
   return NextResponse.json(row, { status: 201 });

@@ -5,7 +5,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const db = getDb();
+  const db = await getDb();
   const { id } = await params;
   const body = await req.json();
 
@@ -14,9 +14,9 @@ export async function PATCH(
   if (!fields.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
 
   const set = fields.map((f) => `${f} = ?`).join(", ");
-  db.prepare(`UPDATE taches SET ${set} WHERE id = ?`).run(...fields.map((f) => body[f]), id);
+  await db.prepare(`UPDATE taches SET ${set} WHERE id = ?`).run(...fields.map((f) => body[f]), id);
 
-  const row = db.prepare("SELECT * FROM taches WHERE id = ?").get(id);
+  const row = await db.prepare("SELECT * FROM taches WHERE id = ?").get(id);
   return NextResponse.json(row);
 }
 
@@ -24,8 +24,8 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const db = getDb();
+  const db = await getDb();
   const { id } = await params;
-  db.prepare("DELETE FROM taches WHERE id = ?").run(id);
+  await db.prepare("DELETE FROM taches WHERE id = ?").run(id);
   return NextResponse.json({ ok: true });
 }

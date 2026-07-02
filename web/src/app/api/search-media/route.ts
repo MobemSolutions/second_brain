@@ -13,14 +13,14 @@ interface SearchResult {
   annee?: string;
 }
 
-function getSetting(key: string): string | null {
-  const db = getDb();
-  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | undefined;
+async function getSetting(key: string): Promise<string | null> {
+  const db = await getDb();
+  const row = await db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | undefined;
   return row?.value ?? null;
 }
 
 async function searchTmdb(query: string, mediaType: "movie" | "tv"): Promise<SearchResult[]> {
-  const apiKey = getSetting("tmdb_key");
+  const apiKey = await getSetting("tmdb_key");
   if (!apiKey) return [];
 
   const endpoint = `https://api.themoviedb.org/3/search/${mediaType}?query=${encodeURIComponent(query)}&api_key=${apiKey}&language=fr-FR&page=1`;
@@ -46,7 +46,7 @@ async function searchTmdb(query: string, mediaType: "movie" | "tv"): Promise<Sea
 }
 
 async function searchRawg(query: string): Promise<SearchResult[]> {
-  const apiKey = getSetting("rawg_key");
+  const apiKey = await getSetting("rawg_key");
   if (!apiKey) return [];
 
   const r = await fetch(`https://api.rawg.io/api/games?key=${apiKey}&search=${encodeURIComponent(query)}&page_size=8`);

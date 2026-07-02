@@ -4,17 +4,17 @@ import { getDb } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const db = getDb();
+  const db = await getDb();
   const traite = req.nextUrl.searchParams.get("traite");
 
   const rows =
     traite !== null
-      ? db
+      ? await db
           .prepare(
             "SELECT * FROM inbox WHERE traite = ? ORDER BY created_at DESC"
           )
           .all(traite === "true" || traite === "1" ? 1 : 0)
-      : db
+      : await db
           .prepare("SELECT * FROM inbox ORDER BY created_at DESC")
           .all();
 
@@ -22,10 +22,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const db = getDb();
+  const db = await getDb();
   const body = await req.json();
 
-  const result = db
+  const result = await db
     .prepare(
       `INSERT INTO inbox (titre, type, contexte, priorite, url, notes)
        VALUES (?, ?, ?, ?, ?, ?)`
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
       body.notes || null
     );
 
-  const row = db
+  const row = await db
     .prepare("SELECT * FROM inbox WHERE id = ?")
     .get(Number(result.lastInsertRowid));
 

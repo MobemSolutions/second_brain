@@ -19,34 +19,34 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const db = getDb();
+  const db = await getDb();
   const { id } = await params;
 
-  const source = db.prepare("SELECT * FROM planning_templates WHERE id = ?").get(id) as { id: number; nom: string } | undefined;
+  const source = await db.prepare("SELECT * FROM planning_templates WHERE id = ?").get(id) as { id: number; nom: string } | undefined;
   if (!source) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  const newTemplate = db
+  const newTemplate = await db
     .prepare("INSERT INTO planning_templates (nom) VALUES (?)")
     .run(`${source.nom} (copie)`);
   const newTemplateId = Number(newTemplate.lastInsertRowid);
 
-  const cartes = db.prepare("SELECT * FROM planning_cartes WHERE template_id = ?").all(id) as unknown as Carte[];
+  const cartes = await db.prepare("SELECT * FROM planning_cartes WHERE template_id = ?").all(id) as unknown as Carte[];
   const carteIdMap = new Map<number, number>();
   const insertCarte = db.prepare("INSERT INTO planning_cartes (template_id, titre, emoji, couleur) VALUES (?, ?, ?, ?)");
   for (const c of cartes) {
-    const result = insertCarte.run(newTemplateId, c.titre, c.emoji, c.couleur);
+    const result = await insertCarte.run(newTemplateId, c.titre, c.emoji, c.couleur);
     carteIdMap.set(c.id, Number(result.lastInsertRowid));
   }
 
-  const creneaux = db.prepare("SELECT * FROM planning_creneaux WHERE template_id = ?").all(id) as unknown as (Creneau & { carte_id: number })[];
+  const creneaux = await db.prepare("SELECT * FROM planning_creneaux WHERE template_id = ?").all(id) as unknown as (Creneau & { carte_id: number })[];
   const insertCreneau = db.prepare(
     "INSERT INTO planning_creneaux (template_id, carte_id, jour, heure_debut, heure_fin) VALUES (?, ?, ?, ?, ?)"
   );
   for (const cr of creneaux) {
     const newCarteId = carteIdMap.get(cr.carte_id);
-    if (newCarteId) insertCreneau.run(newTemplateId, newCarteId, cr.jour, cr.heure_debut, cr.heure_fin);
+    if (newCarteId) await insertCreneau.run(newTemplateId, newCarteId, cr.jour, cr.heure_debut, cr.heure_fin);
   }
 
-  const row = db.prepare("SELECT * FROM planning_templates WHERE id = ?").get(newTemplateId);
+  const row = await db.prepare("SELECT * FROM planning_templates WHERE id = ?").get(newTemplateId);
   return NextResponse.json(row, { status: 201 });
 }

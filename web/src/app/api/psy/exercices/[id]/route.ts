@@ -5,8 +5,8 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const db = getDb();
+  const db = await getDb();
   const { id } = await params;
-  db.prepare("DELETE FROM psy_exercices WHERE id = ?").run(id);
+  await db.prepare("DELETE FROM psy_exercices WHERE id = ?").run(id);
   return NextResponse.json({ ok: true });
 }

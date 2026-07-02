@@ -31,12 +31,12 @@ function vevent(uid: string, date: string, summary: string, desc?: string): stri
 }
 
 export async function GET() {
-  const db = getDb();
+  const db = await getDb();
 
   const events: string[] = [];
 
   // Tasks with deadlines (non-done)
-  const taches = db
+  const taches = await db
     .prepare(
       `SELECT t.*, p.titre as projet_titre
        FROM taches t LEFT JOIN projets p ON p.id = t.projet_id
@@ -55,7 +55,7 @@ export async function GET() {
   const DISC_ICON: Record<string, string> = {
     musculation: "💪", running: "🏃", escalade: "🧗", alpinisme: "🏔️",
   };
-  const sport = db
+  const sport = await db
     .prepare(
       `SELECT * FROM sport
        WHERE date >= date('now', '-30 days')
@@ -74,7 +74,7 @@ export async function GET() {
   }
 
   // Subscription renewals (next 60 days)
-  const abos = db
+  const abos = await db
     .prepare(
       `SELECT * FROM abonnements
        WHERE actif = 1

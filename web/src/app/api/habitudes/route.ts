@@ -4,16 +4,16 @@ import { getDb } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const db = getDb();
+  const db = await getDb();
   const date = req.nextUrl.searchParams.get("date");
   const days = parseInt(req.nextUrl.searchParams.get("days") || "30");
 
   if (date) {
-    const row = db.prepare("SELECT * FROM habitudes WHERE date = ?").get(date);
+    const row = await db.prepare("SELECT * FROM habitudes WHERE date = ?").get(date);
     return NextResponse.json(row || null);
   }
 
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT * FROM habitudes
        WHERE date >= date('now', ? || ' days')
@@ -25,10 +25,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const db = getDb();
+  const db = await getDb();
   const body = await req.json();
 
-  const existing = db
+  const existing = await db
     .prepare("SELECT id FROM habitudes WHERE date = ?")
     .get(body.date) as { id: number } | undefined;
 
@@ -45,15 +45,15 @@ export async function POST(req: NextRequest) {
     const fields = Object.keys(body).filter((k) => allowed.includes(k));
     if (fields.length) {
       const set = fields.map((f) => `${f} = ?`).join(", ");
-      db.prepare(`UPDATE habitudes SET ${set} WHERE date = ?`).run(
+      await db.prepare(`UPDATE habitudes SET ${set} WHERE date = ?`).run(
         ...fields.map((f) => body[f]),
         body.date
       );
     }
-    return NextResponse.json(db.prepare("SELECT * FROM habitudes WHERE date = ?").get(body.date));
+    return NextResponse.json(await db.prepare("SELECT * FROM habitudes WHERE date = ?").get(body.date));
   }
 
-  const result = db
+  const result = await db
     .prepare(
       `INSERT INTO habitudes (
          date, sommeil, eau, meditation, lecture, pas, poids, pompes,
@@ -81,6 +81,6 @@ export async function POST(req: NextRequest) {
       body.humeur ?? null, body.energie ?? null, body.notes || null
     );
 
-  const row = db.prepare("SELECT * FROM habitudes WHERE id = ?").get(Number(result.lastInsertRowid));
+  const row = await db.prepare("SELECT * FROM habitudes WHERE id = ?").get(Number(result.lastInsertRowid));
   return NextResponse.json(row, { status: 201 });
 }

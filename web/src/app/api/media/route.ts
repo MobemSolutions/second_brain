@@ -4,7 +4,7 @@ import { getDb } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const db = getDb();
+  const db = await getDb();
   const type = req.nextUrl.searchParams.get("type");
   const statut = req.nextUrl.searchParams.get("statut");
 
@@ -15,14 +15,14 @@ export async function GET(req: NextRequest) {
   if (statut) { query += " AND statut = ?"; args.push(statut); }
 
   query += " ORDER BY created_at DESC";
-  return NextResponse.json(db.prepare(query).all(...args));
+  return NextResponse.json(await db.prepare(query).all(...args));
 }
 
 export async function POST(req: NextRequest) {
-  const db = getDb();
+  const db = await getDb();
   const body = await req.json();
 
-  const result = db
+  const result = await db
     .prepare(
       `INSERT INTO media (titre, type, statut, note, date_fin, genre, createur, plateforme, avis, description, casting)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -41,6 +41,6 @@ export async function POST(req: NextRequest) {
       body.casting || null
     );
 
-  const row = db.prepare("SELECT * FROM media WHERE id = ?").get(Number(result.lastInsertRowid));
+  const row = await db.prepare("SELECT * FROM media WHERE id = ?").get(Number(result.lastInsertRowid));
   return NextResponse.json(row, { status: 201 });
 }

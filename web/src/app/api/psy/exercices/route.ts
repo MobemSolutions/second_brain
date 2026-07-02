@@ -4,7 +4,7 @@ import { getDb } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const db = getDb();
+  const db = await getDb();
   const from = req.nextUrl.searchParams.get("from");
   const to = req.nextUrl.searchParams.get("to");
 
@@ -16,14 +16,14 @@ export async function GET(req: NextRequest) {
 
   query += " ORDER BY date DESC, heure DESC, created_at DESC";
 
-  return NextResponse.json(db.prepare(query).all(...args));
+  return NextResponse.json(await db.prepare(query).all(...args));
 }
 
 export async function POST(req: NextRequest) {
-  const db = getDb();
+  const db = await getDb();
   const b = await req.json();
 
-  const result = db
+  const result = await db
     .prepare(
       `INSERT INTO psy_exercices (date, titre, heure, sensation, intelligence, monde)
        VALUES (?, '', ?, ?, ?, ?)`
@@ -36,6 +36,6 @@ export async function POST(req: NextRequest) {
       b.monde || null
     );
 
-  const row = db.prepare("SELECT * FROM psy_exercices WHERE id = ?").get(Number(result.lastInsertRowid));
+  const row = await db.prepare("SELECT * FROM psy_exercices WHERE id = ?").get(Number(result.lastInsertRowid));
   return NextResponse.json(row, { status: 201 });
 }

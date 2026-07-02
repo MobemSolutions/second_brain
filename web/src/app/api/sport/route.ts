@@ -4,7 +4,7 @@ import { getDb } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const db = getDb();
+  const db = await getDb();
   const discipline = req.nextUrl.searchParams.get("discipline");
   const limit = req.nextUrl.searchParams.get("limit") || "20";
 
@@ -13,14 +13,14 @@ export async function GET(req: NextRequest) {
     : "SELECT * FROM sport ORDER BY date DESC, created_at DESC LIMIT ?";
 
   const args = discipline ? [discipline, parseInt(limit)] : [parseInt(limit)];
-  return NextResponse.json(db.prepare(query).all(...args));
+  return NextResponse.json(await db.prepare(query).all(...args));
 }
 
 export async function POST(req: NextRequest) {
-  const db = getDb();
+  const db = await getDb();
   const b = await req.json();
 
-  const result = db
+  const result = await db
     .prepare(
       `INSERT INTO sport
          (discipline, date, duree, rpe, meteo, notes,
@@ -40,6 +40,6 @@ export async function POST(req: NextRequest) {
       b.bivouac ? 1 : 0, b.rapport || null
     );
 
-  const row = db.prepare("SELECT * FROM sport WHERE id = ?").get(Number(result.lastInsertRowid));
+  const row = await db.prepare("SELECT * FROM sport WHERE id = ?").get(Number(result.lastInsertRowid));
   return NextResponse.json(row, { status: 201 });
 }

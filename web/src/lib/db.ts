@@ -1,35 +1,72 @@
-import { DatabaseSync } from "node:sqlite";
-import path from "path";
-import { mkdirSync } from "fs";
+import { createClient, type Client, type InArgs, type InValue } from "@libsql/client";
 
-let _db: DatabaseSync | null = null;
-
-export function getDb(): DatabaseSync {
-  if (_db) return _db;
-
-  const dbPath =
-    process.env.DB_PATH ||
-    path.join(process.cwd(), "data", "second_brain.db");
-
-  try {
-    mkdirSync(path.dirname(dbPath), { recursive: true });
-  } catch {}
-
-  _db = new DatabaseSync(dbPath);
-  _db.exec("PRAGMA journal_mode = WAL");
-  _db.exec("PRAGMA foreign_keys = ON");
-
-  initSchema(_db);
-  migrate(_db);
-  return _db;
+export interface Stmt {
+  get(...args: InValue[]): Promise<Record<string, unknown> | undefined>;
+  all(...args: InValue[]): Promise<Record<string, unknown>[]>;
+  run(...args: InValue[]): Promise<{ lastInsertRowid: number; changes: number }>;
 }
 
-function migrate(db: DatabaseSync): void {
-  const addCol = (table: string, col: string, type: string) => {
-    try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`); } catch {}
+export interface Db {
+  prepare(sql: string): Stmt;
+  exec(sql: string): Promise<void>;
+}
+
+let _client: Client | null = null;
+let _ready: Promise<void> | null = null;
+
+function rowToObject(row: Record<string, unknown>): Record<string, unknown> {
+  return { ...row };
+}
+
+function wrap(client: Client): Db {
+  return {
+    prepare(sql: string): Stmt {
+      return {
+        async get(...args: InValue[]) {
+          const r = await client.execute({ sql, args: args as InArgs });
+          return r.rows[0] ? rowToObject(r.rows[0] as unknown as Record<string, unknown>) : undefined;
+        },
+        async all(...args: InValue[]) {
+          const r = await client.execute({ sql, args: args as InArgs });
+          return r.rows.map((row) => rowToObject(row as unknown as Record<string, unknown>));
+        },
+        async run(...args: InValue[]) {
+          const r = await client.execute({ sql, args: args as InArgs });
+          return { lastInsertRowid: Number(r.lastInsertRowid ?? 0), changes: r.rowsAffected };
+        },
+      };
+    },
+    async exec(sql: string) {
+      await client.executeMultiple(sql);
+    },
   };
+}
+
+export async function getDb(): Promise<Db> {
+  if (!_client) {
+    const url = process.env.TURSO_DATABASE_URL;
+    const authToken = process.env.TURSO_AUTH_TOKEN;
+    if (!url) throw new Error("TURSO_DATABASE_URL is not set");
+    _client = createClient({ url, authToken });
+    _ready = bootstrap(_client);
+  }
+  await _ready;
+  return wrap(_client);
+}
+
+async function bootstrap(client: Client): Promise<void> {
+  await client.execute("PRAGMA foreign_keys = ON");
+  await initSchema(client);
+  await migrate(client);
+}
+
+async function addCol(client: Client, table: string, col: string, type: string): Promise<void> {
+  try { await client.execute(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`); } catch {}
+}
+
+async function migrate(client: Client): Promise<void> {
   try {
-    db.exec(`CREATE TABLE IF NOT EXISTS nutrition_profile (
+    await client.execute(`CREATE TABLE IF NOT EXISTS nutrition_profile (
       id              INTEGER PRIMARY KEY CHECK (id = 1),
       poids           REAL,
       taille          INTEGER,
@@ -47,53 +84,53 @@ function migrate(db: DatabaseSync): void {
   } catch {}
   // pinned_files table (created here if not exists via initSchema, but migrate adds it if DB predates it)
   try {
-    db.exec(`CREATE TABLE IF NOT EXISTS pinned_files (
+    await client.execute(`CREATE TABLE IF NOT EXISTS pinned_files (
       key        TEXT PRIMARY KEY,
       pdf_path   TEXT,
       updated_at TEXT DEFAULT (datetime('now','localtime'))
     )`);
   } catch {}
-  addCol("taches", "date_debut", "TEXT");
-  addCol("habitudes", "nofap", "INTEGER DEFAULT 0");
-  addCol("habitudes", "brossage_matin", "INTEGER DEFAULT 0");
-  addCol("habitudes", "brossage_soir", "INTEGER DEFAULT 0");
-  addCol("habitudes", "gratte_langue", "INTEGER DEFAULT 0");
-  addCol("habitudes", "fil_dentaire", "INTEGER DEFAULT 0");
-  addCol("habitudes", "creme_solaire", "INTEGER DEFAULT 0");
-  addCol("habitudes", "soin_peau_soir", "INTEGER DEFAULT 0");
-  addCol("habitudes", "skin_icing", "INTEGER DEFAULT 0");
-  addCol("habitudes", "gouttes_cernes", "INTEGER DEFAULT 0");
-  addCol("habitudes", "bonnet_satin", "INTEGER DEFAULT 0");
-  addCol("habitudes", "flexibilite", "INTEGER DEFAULT 0");
-  addCol("habitudes", "jawline", "INTEGER DEFAULT 0");
-  addCol("habitudes", "neck_curls", "INTEGER DEFAULT 0");
-  addCol("habitudes", "soin_visage_lavage", "INTEGER DEFAULT 0");
-  addCol("habitudes", "soin_visage_rincage", "INTEGER DEFAULT 0");
-  addCol("habitudes", "soin_visage_creme", "INTEGER DEFAULT 0");
-  addCol("habitudes", "bain_bouche", "INTEGER DEFAULT 0");
-  addCol("habitudes", "exfoliant", "INTEGER DEFAULT 0");
-  addCol("habitudes", "epilation_sourcils", "INTEGER DEFAULT 0");
-  addCol("habitudes", "rasage_corps", "INTEGER DEFAULT 0");
-  addCol("habitudes", "rasage_barbe", "INTEGER DEFAULT 0");
-  addCol("habitudes", "pastille_dentaire", "INTEGER DEFAULT 0");
-  addCol("habitudes", "pas", "INTEGER");
-  addCol("habitudes", "poids", "REAL");
-  addCol("habitudes", "pompes", "INTEGER");
-  addCol("sport", "pdf_path", "TEXT");
-  addCol("nutrition_profile", "day_types", "TEXT");
-  addCol("nutrition", "day_type", "TEXT");
-  addCol("media", "description", "TEXT");
-  addCol("media", "casting", "TEXT");
-  addCol("projets", "description", "TEXT");
-  addCol("projets", "couleur", "TEXT");
+  await addCol(client, "taches", "date_debut", "TEXT");
+  await addCol(client, "habitudes", "nofap", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "brossage_matin", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "brossage_soir", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "gratte_langue", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "fil_dentaire", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "creme_solaire", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "soin_peau_soir", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "skin_icing", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "gouttes_cernes", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "bonnet_satin", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "flexibilite", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "jawline", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "neck_curls", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "soin_visage_lavage", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "soin_visage_rincage", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "soin_visage_creme", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "bain_bouche", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "exfoliant", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "epilation_sourcils", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "rasage_corps", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "rasage_barbe", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "pastille_dentaire", "INTEGER DEFAULT 0");
+  await addCol(client, "habitudes", "pas", "INTEGER");
+  await addCol(client, "habitudes", "poids", "REAL");
+  await addCol(client, "habitudes", "pompes", "INTEGER");
+  await addCol(client, "sport", "pdf_path", "TEXT");
+  await addCol(client, "nutrition_profile", "day_types", "TEXT");
+  await addCol(client, "nutrition", "day_type", "TEXT");
+  await addCol(client, "media", "description", "TEXT");
+  await addCol(client, "media", "casting", "TEXT");
+  await addCol(client, "projets", "description", "TEXT");
+  await addCol(client, "projets", "couleur", "TEXT");
   try {
-    db.exec(`CREATE TABLE IF NOT EXISTS settings (
+    await client.execute(`CREATE TABLE IF NOT EXISTS settings (
       key   TEXT PRIMARY KEY,
       value TEXT
     )`);
   } catch {}
   try {
-    db.exec(`CREATE TABLE IF NOT EXISTS psy_seances (
+    await client.execute(`CREATE TABLE IF NOT EXISTS psy_seances (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       date       TEXT NOT NULL,
       titre      TEXT,
@@ -103,7 +140,7 @@ function migrate(db: DatabaseSync): void {
     )`);
   } catch {}
   try {
-    db.exec(`CREATE TABLE IF NOT EXISTS psy_exercices (
+    await client.execute(`CREATE TABLE IF NOT EXISTS psy_exercices (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       date       TEXT NOT NULL,
       titre      TEXT NOT NULL,
@@ -111,12 +148,12 @@ function migrate(db: DatabaseSync): void {
       created_at TEXT DEFAULT (datetime('now','localtime'))
     )`);
   } catch {}
-  addCol("psy_exercices", "heure", "TEXT");
-  addCol("psy_exercices", "sensation", "TEXT");
-  addCol("psy_exercices", "intelligence", "TEXT");
-  addCol("psy_exercices", "monde", "TEXT");
+  await addCol(client, "psy_exercices", "heure", "TEXT");
+  await addCol(client, "psy_exercices", "sensation", "TEXT");
+  await addCol(client, "psy_exercices", "intelligence", "TEXT");
+  await addCol(client, "psy_exercices", "monde", "TEXT");
   try {
-    db.exec(`CREATE TABLE IF NOT EXISTS psy_observations (
+    await client.execute(`CREATE TABLE IF NOT EXISTS psy_observations (
       id                       INTEGER PRIMARY KEY AUTOINCREMENT,
       date                     TEXT NOT NULL,
       heure                    TEXT,
@@ -129,14 +166,14 @@ function migrate(db: DatabaseSync): void {
     )`);
   } catch {}
   try {
-    db.exec(`CREATE TABLE IF NOT EXISTS planning_templates (
+    await client.execute(`CREATE TABLE IF NOT EXISTS planning_templates (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       nom        TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now','localtime'))
     )`);
   } catch {}
   try {
-    db.exec(`CREATE TABLE IF NOT EXISTS planning_cartes (
+    await client.execute(`CREATE TABLE IF NOT EXISTS planning_cartes (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       template_id INTEGER NOT NULL REFERENCES planning_templates(id) ON DELETE CASCADE,
       titre       TEXT NOT NULL,
@@ -146,7 +183,7 @@ function migrate(db: DatabaseSync): void {
     )`);
   } catch {}
   try {
-    db.exec(`CREATE TABLE IF NOT EXISTS planning_creneaux (
+    await client.execute(`CREATE TABLE IF NOT EXISTS planning_creneaux (
       id           INTEGER PRIMARY KEY AUTOINCREMENT,
       template_id  INTEGER NOT NULL REFERENCES planning_templates(id) ON DELETE CASCADE,
       carte_id     INTEGER NOT NULL REFERENCES planning_cartes(id) ON DELETE CASCADE,
@@ -157,7 +194,7 @@ function migrate(db: DatabaseSync): void {
     )`);
   } catch {}
   try {
-    db.exec(`CREATE TABLE IF NOT EXISTS courses (
+    await client.execute(`CREATE TABLE IF NOT EXISTS courses (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       titre      TEXT NOT NULL,
       categorie  TEXT,
@@ -169,7 +206,7 @@ function migrate(db: DatabaseSync): void {
     )`);
   } catch {}
   try {
-    db.exec(`CREATE TABLE IF NOT EXISTS habit_definitions (
+    await client.execute(`CREATE TABLE IF NOT EXISTS habit_definitions (
       id           INTEGER PRIMARY KEY AUTOINCREMENT,
       cle          TEXT NOT NULL UNIQUE,
       label        TEXT NOT NULL,
@@ -184,9 +221,9 @@ function migrate(db: DatabaseSync): void {
       created_at   TEXT DEFAULT (datetime('now','localtime'))
     )`);
   } catch {}
-  addCol("habit_definitions", "ordre", "INTEGER DEFAULT 0");
+  await addCol(client, "habit_definitions", "ordre", "INTEGER DEFAULT 0");
   try {
-    db.exec(`CREATE TABLE IF NOT EXISTS habit_values (
+    await client.execute(`CREATE TABLE IF NOT EXISTS habit_values (
       id       INTEGER PRIMARY KEY AUTOINCREMENT,
       date     TEXT NOT NULL,
       habit_id INTEGER NOT NULL REFERENCES habit_definitions(id) ON DELETE CASCADE,
@@ -194,7 +231,7 @@ function migrate(db: DatabaseSync): void {
       UNIQUE(date, habit_id)
     )`);
   } catch {}
-  migrateHabitsV2(db);
+  await migrateHabitsV2(client);
 }
 
 interface HabitSeed {
@@ -242,45 +279,46 @@ const HABIT_SEED: HabitSeed[] = [
   { cle: "pastille_dentaire", label: "🔴 Pastille révélatrice", type: "checkbox", section: "ponctuel", target_freq: "1-2x/semaine", score_impact: "aucun", oldCol: "pastille_dentaire" },
 ];
 
-function migrateHabitsV2(db: DatabaseSync): void {
-  const flag = db.prepare("SELECT value FROM settings WHERE key = 'habits_v2_migrated'").get() as { value: string } | undefined;
+async function migrateHabitsV2(client: Client): Promise<void> {
+  const flagRes = await client.execute("SELECT value FROM settings WHERE key = 'habits_v2_migrated'");
+  const flag = flagRes.rows[0] as unknown as { value: string } | undefined;
   if (flag?.value === "1") return;
 
-  const insertDef = db.prepare(
-    `INSERT OR IGNORE INTO habit_definitions (cle, label, type, section, unite, cible, target_freq, score_impact, ordre)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
   const cleToId = new Map<string, number>();
   const sectionCounters: Record<string, number> = {};
   for (const s of HABIT_SEED) {
     const ordre = sectionCounters[s.section] ?? 0;
     sectionCounters[s.section] = ordre + 1;
-    insertDef.run(s.cle, s.label, s.type, s.section, s.unite ?? null, s.cible ?? null, s.target_freq ?? null, s.score_impact, ordre);
-    const row = db.prepare("SELECT id FROM habit_definitions WHERE cle = ?").get(s.cle) as { id: number };
+    await client.execute({
+      sql: `INSERT OR IGNORE INTO habit_definitions (cle, label, type, section, unite, cible, target_freq, score_impact, ordre)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [s.cle, s.label, s.type, s.section, s.unite ?? null, s.cible ?? null, s.target_freq ?? null, s.score_impact, ordre],
+    });
+    const row = (await client.execute({ sql: "SELECT id FROM habit_definitions WHERE cle = ?", args: [s.cle] })).rows[0] as unknown as { id: number };
     cleToId.set(s.cle, row.id);
   }
 
-  const oldRows = db.prepare("SELECT * FROM habitudes").all() as Record<string, unknown>[];
-  const insertVal = db.prepare(
-    `INSERT OR IGNORE INTO habit_values (date, habit_id, valeur) VALUES (?, ?, ?)`
-  );
+  const oldRows = (await client.execute("SELECT * FROM habitudes")).rows as unknown as Record<string, unknown>[];
   for (const row of oldRows) {
     for (const s of HABIT_SEED) {
       const v = row[s.oldCol];
       if (v !== null && v !== undefined) {
-        insertVal.run(row.date as string, cleToId.get(s.cle)!, v as number);
+        await client.execute({
+          sql: "INSERT OR IGNORE INTO habit_values (date, habit_id, valeur) VALUES (?, ?, ?)",
+          args: [row.date as string, cleToId.get(s.cle)!, v as number],
+        });
       }
     }
   }
 
-  db.prepare(
+  await client.execute(
     `INSERT INTO settings (key, value) VALUES ('habits_v2_migrated', '1')
      ON CONFLICT(key) DO UPDATE SET value = '1'`
-  ).run();
+  );
 }
 
-function initSchema(db: DatabaseSync): void {
-  db.exec(`
+async function initSchema(client: Client): Promise<void> {
+  await client.executeMultiple(`
     CREATE TABLE IF NOT EXISTS inbox (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       titre      TEXT NOT NULL,

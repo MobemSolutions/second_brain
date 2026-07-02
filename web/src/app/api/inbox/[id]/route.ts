@@ -5,7 +5,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const db = getDb();
+  const db = await getDb();
   const { id } = await params;
   const body = await req.json();
 
@@ -16,11 +16,11 @@ export async function PATCH(
   const set = fields.map((f) => `${f} = ?`).join(", ");
   const values = [...fields.map((f) => body[f]), id];
 
-  db.prepare(
+  await db.prepare(
     `UPDATE inbox SET ${set}, updated_at = datetime('now','localtime') WHERE id = ?`
   ).run(...values);
 
-  const row = db.prepare("SELECT * FROM inbox WHERE id = ?").get(id);
+  const row = await db.prepare("SELECT * FROM inbox WHERE id = ?").get(id);
   return NextResponse.json(row);
 }
 
@@ -28,8 +28,8 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const db = getDb();
+  const db = await getDb();
   const { id } = await params;
-  db.prepare("DELETE FROM inbox WHERE id = ?").run(id);
+  await db.prepare("DELETE FROM inbox WHERE id = ?").run(id);
   return NextResponse.json({ ok: true });
 }

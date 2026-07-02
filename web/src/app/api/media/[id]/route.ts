@@ -5,7 +5,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const db = getDb();
+  const db = await getDb();
   const { id } = await params;
   const body = await req.json();
 
@@ -14,17 +14,17 @@ export async function PATCH(
   if (!fields.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
 
   const set = fields.map((f) => `${f} = ?`).join(", ");
-  db.prepare(`UPDATE media SET ${set} WHERE id = ?`).run(...fields.map((f) => body[f]), id);
+  await db.prepare(`UPDATE media SET ${set} WHERE id = ?`).run(...fields.map((f) => body[f]), id);
 
-  return NextResponse.json(db.prepare("SELECT * FROM media WHERE id = ?").get(id));
+  return NextResponse.json(await db.prepare("SELECT * FROM media WHERE id = ?").get(id));
 }
 
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const db = getDb();
+  const db = await getDb();
   const { id } = await params;
-  db.prepare("DELETE FROM media WHERE id = ?").run(id);
+  await db.prepare("DELETE FROM media WHERE id = ?").run(id);
   return NextResponse.json({ ok: true });
 }

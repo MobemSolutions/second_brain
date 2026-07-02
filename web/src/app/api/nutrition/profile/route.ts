@@ -4,13 +4,13 @@ import { getDb } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const db = getDb();
-  const row = db.prepare("SELECT * FROM nutrition_profile WHERE id = 1").get();
+  const db = await getDb();
+  const row = await db.prepare("SELECT * FROM nutrition_profile WHERE id = 1").get();
   return NextResponse.json(row || null);
 }
 
 export async function POST(req: NextRequest) {
-  const db = getDb();
+  const db = await getDb();
   const body = await req.json() as {
     poids?: number; taille?: number; age?: number; sexe?: string;
     masse_grasse?: number; activite?: string; objectif?: string; deficit?: number;
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     day_types?: string;
   };
 
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO nutrition_profile
       (id, poids, taille, age, sexe, masse_grasse, activite, objectif, deficit,
        cible_calories, cible_proteines, cible_glucides, cible_lipides, day_types)
@@ -41,5 +41,5 @@ export async function POST(req: NextRequest) {
     body.day_types ?? null
   );
 
-  return NextResponse.json(db.prepare("SELECT * FROM nutrition_profile WHERE id = 1").get());
+  return NextResponse.json(await db.prepare("SELECT * FROM nutrition_profile WHERE id = 1").get());
 }

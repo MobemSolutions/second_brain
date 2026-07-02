@@ -4,16 +4,16 @@ import { getDb } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const db = getDb();
+  const db = await getDb();
   const date = req.nextUrl.searchParams.get("date");
   const days = parseInt(req.nextUrl.searchParams.get("days") || "14");
 
   if (date) {
-    const row = db.prepare("SELECT * FROM nutrition WHERE date = ?").get(date);
+    const row = await db.prepare("SELECT * FROM nutrition WHERE date = ?").get(date);
     return NextResponse.json(row || null);
   }
 
-  const rows = db
+  const rows = await db
     .prepare(`SELECT * FROM nutrition WHERE date >= date('now', ? || ' days') ORDER BY date DESC`)
     .all(`-${days}`);
 
@@ -21,10 +21,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const db = getDb();
+  const db = await getDb();
   const body = await req.json();
 
-  const existing = db
+  const existing = await db
     .prepare("SELECT id FROM nutrition WHERE date = ?")
     .get(body.date) as { id: number } | undefined;
 
@@ -33,15 +33,15 @@ export async function POST(req: NextRequest) {
     const fields = Object.keys(body).filter((k) => allowed.includes(k));
     if (fields.length) {
       const set = fields.map((f) => `${f} = ?`).join(", ");
-      db.prepare(`UPDATE nutrition SET ${set} WHERE date = ?`).run(
+      await db.prepare(`UPDATE nutrition SET ${set} WHERE date = ?`).run(
         ...fields.map((f) => body[f]),
         body.date
       );
     }
-    return NextResponse.json(db.prepare("SELECT * FROM nutrition WHERE date = ?").get(body.date));
+    return NextResponse.json(await db.prepare("SELECT * FROM nutrition WHERE date = ?").get(body.date));
   }
 
-  const result = db
+  const result = await db
     .prepare(
       `INSERT INTO nutrition (date, calories, proteines, glucides, lipides, notes, pdf_path, day_type)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
@@ -57,6 +57,6 @@ export async function POST(req: NextRequest) {
       body.day_type || null
     );
 
-  const row = db.prepare("SELECT * FROM nutrition WHERE id = ?").get(Number(result.lastInsertRowid));
+  const row = await db.prepare("SELECT * FROM nutrition WHERE id = ?").get(Number(result.lastInsertRowid));
   return NextResponse.json(row, { status: 201 });
 }
