@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Minus, Plus, RotateCcw } from "lucide-react";
-import { type SharedViewProps, PRIO_DOT, today } from "./types";
+import { Minus, Plus, RotateCcw, X, CalendarDays, Pencil } from "lucide-react";
+import { type SharedViewProps, PRIO_DOT, PRIO_LABEL, parseContextes, today } from "./types";
 
 type GroupBy = "contexte" | "projet" | "priorite";
 
@@ -32,8 +32,10 @@ export default function MindMapView({ taches, onAdd, onEdit }: SharedViewProps &
   const [hovered, setHovered] = useState<number | null>(null);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   const [dragging, setDragging] = useState(false);
+  const [selected, setSelected] = useState<{ task: (typeof taches)[0]; left: number; top: number } | null>(null);
 
   const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; startY: number; viewX: number; viewY: number } | null>(null);
   const draggedRef = useRef(false);
 
@@ -104,8 +106,11 @@ export default function MindMapView({ taches, onAdd, onEdit }: SharedViewProps &
     zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX, e.clientY);
   };
 
+  // No setPointerCapture here: capturing the pointer on the svg redirects
+  // the browser's synthesized "click" event to the capturing element too,
+  // which silently ate clicks on task/group nodes. onPointerLeave below
+  // covers the case where the cursor exits the canvas mid-drag instead.
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
-    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
     dragRef.current = { startX: e.clientX, startY: e.clientY, viewX: view.x, viewY: view.y };
     draggedRef.current = false;
     setDragging(true);
@@ -116,7 +121,10 @@ export default function MindMapView({ taches, onAdd, onEdit }: SharedViewProps &
     if (!drag || !rect) return; // only pan while the pointer is actually held down
     const dxClient = e.clientX - drag.startX;
     const dyClient = e.clientY - drag.startY;
-    if (Math.abs(dxClient) > 3 || Math.abs(dyClient) > 3) draggedRef.current = true;
+    if (!draggedRef.current && (Math.abs(dxClient) > 3 || Math.abs(dyClient) > 3)) {
+      draggedRef.current = true;
+      setSelected(null); // detail box position is stale once the canvas moves
+    }
     const dx = dxClient * (SVG_W / rect.width);
     const dy = dyClient * (SVG_H / rect.height);
     setView((v) => ({ ...v, x: drag.viewX + dx, y: drag.viewY + dy }));
@@ -127,18 +135,23 @@ export default function MindMapView({ taches, onAdd, onEdit }: SharedViewProps &
   };
 
   // draggedRef stays true for the single click event that follows a real
-  // drag (so it doesn't also open the edit modal / re-focus), then resets.
-  const handleTaskClick = (task: (typeof taches)[0]) => {
+  // drag (so it doesn't also open the detail box / re-focus), then resets.
+  const handleTaskClick = (e: React.MouseEvent, task: (typeof taches)[0]) => {
+    e.stopPropagation();
     if (draggedRef.current) { draggedRef.current = false; return; }
-    onEdit(task);
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setSelected({ task, left: e.clientX - rect.left, top: e.clientY - rect.top });
   };
-  const handleGroupClick = (x: number, y: number) => {
+  const handleGroupClick = (e: React.MouseEvent, x: number, y: number) => {
+    e.stopPropagation();
     if (draggedRef.current) { draggedRef.current = false; return; }
+    setSelected(null);
     focusOn(x, y);
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative" ref={containerRef} onClick={() => setSelected(null)}>
       {/* Controls */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
@@ -179,7 +192,7 @@ export default function MindMapView({ taches, onAdd, onEdit }: SharedViewProps &
             ref={svgRef}
             viewBox={`0 0 ${SVG_W} ${SVG_H}`}
             className="w-full touch-none"
-            style={{ maxHeight: "600px", cursor: dragging ? "grabbing" : "grab" }}
+            style={{ maxHeight: "600px", cursor: dragging ? "grabbing" : "grab", userSelect: "none", WebkitUserSelect: "none" }}
             onWheel={onWheel}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
@@ -210,25 +223,24 @@ export default function MindMapView({ taches, onAdd, onEdit }: SharedViewProps &
               {/* Task nodes */}
               {taskNodes.map(({ task, x, y, color }) => {
                 const isH = hovered === task.id;
+                const isSelected = selected?.task.id === task.id;
                 const isOverdue = task.date_echeance && task.date_echeance < today();
                 const r = task.priorite === "haute" ? 7 : task.priorite === "moyenne" ? 5.5 : 4.5;
-                const labelW = Math.min(100, task.titre.length * 5.5);
 
                 return (
                   <g key={`t-${task.id}`} style={{ cursor: "pointer" }}
                     onMouseEnter={() => setHovered(task.id)}
                     onMouseLeave={() => setHovered(null)}
-                    onClick={() => handleTaskClick(task)}
+                    onClick={(e) => handleTaskClick(e, task)}
                   >
-                    {/* Hover tooltip bg */}
-                    {isH && (
-                      <rect x={x - labelW / 2 - 6} y={y + r + 4} width={labelW + 12} height={20} rx="4"
-                        fill="#1a1a18" opacity="0.85" />
-                    )}
-
-                    <circle cx={x} cy={y} r={isH ? r * 1.5 : r}
-                      fill={color} opacity={isH ? 1 : 0.7}
+                    <circle cx={x} cy={y} r={isH || isSelected ? r * 1.5 : r}
+                      fill={color} opacity={isH || isSelected ? 1 : 0.7}
                       style={{ transition: "r 0.1s, opacity 0.1s" }} />
+
+                    {/* Selected ring — click a node to open its detail box */}
+                    {isSelected && (
+                      <circle cx={x} cy={y} r={r * 1.5 + 3} fill="none" stroke="#6d28d9" strokeWidth="1.5" opacity="0.7" />
+                    )}
 
                     {/* Overdue ring */}
                     {isOverdue && (
@@ -239,20 +251,6 @@ export default function MindMapView({ taches, onAdd, onEdit }: SharedViewProps &
                     {/* Priority dot */}
                     <circle cx={x + r * 0.6} cy={y - r * 0.6} r={2}
                       fill={PRIO_DOT[task.priorite] ?? "#9ca3af"} opacity="0.9" />
-
-                    {/* Hover label */}
-                    {isH && (
-                      <text x={x} y={y + r + 18} textAnchor="middle" fontSize="10" fill="#ffffff" fontWeight="500">
-                        {task.titre.length > 18 ? task.titre.slice(0, 17) + "…" : task.titre}
-                      </text>
-                    )}
-
-                    {/* Static short label for big nodes */}
-                    {!isH && task.priorite === "haute" && (
-                      <text x={x} y={y + r + 12} textAnchor="middle" fontSize="9" fill="#7a7a78">
-                        {task.titre.length > 12 ? task.titre.slice(0, 11) + "…" : task.titre}
-                      </text>
-                    )}
                   </g>
                 );
               })}
@@ -260,7 +258,7 @@ export default function MindMapView({ taches, onAdd, onEdit }: SharedViewProps &
               {/* Group nodes */}
               {groupNodes.map(({ key, x, y, color, tasks }) => (
                 <g key={`g-${key}`} style={{ cursor: "pointer" }}
-                  onClick={() => handleGroupClick(x, y)}
+                  onClick={(e) => handleGroupClick(e, x, y)}
                 >
                   <circle cx={x} cy={y} r={20} fill={color} opacity="0.12" />
                   <circle cx={x} cy={y} r={14} fill={color} opacity="0.2" />
@@ -282,6 +280,62 @@ export default function MindMapView({ taches, onAdd, onEdit }: SharedViewProps &
           </svg>
         )}
       </div>
+
+      {/* Task detail box — opens on click, shows the full title (no more
+          truncated "…" inline labels) plus context/priority/date/notes. */}
+      {selected && (() => {
+        const t = selected.task;
+        const overdue = t.date_echeance && t.date_echeance < today();
+        const boxW = 260;
+        const containerW = containerRef.current?.clientWidth ?? boxW + 16;
+        const left = Math.min(Math.max(8, selected.left - boxW / 2), Math.max(8, containerW - boxW - 8));
+        const top = selected.top + 14;
+        return (
+          <div
+            className="absolute z-20 rounded-lg p-3 space-y-2"
+            style={{ left, top, width: boxW, backgroundColor: "#ffffff", border: "1px solid #e4e2de", boxShadow: "0 10px 28px rgba(0,0,0,0.18)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-sm font-medium leading-snug flex-1" style={{ color: "#1a1a18" }}>{t.titre}</p>
+              <button onClick={() => setSelected(null)} style={{ color: "#b0aea9" }} className="shrink-0"><X size={14} /></button>
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] px-1.5 py-0.5 rounded flex items-center gap-1" style={{ backgroundColor: "#f0eeed", color: "#5a5a58" }}>
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: PRIO_DOT[t.priorite] ?? "#9ca3af" }} />
+                {PRIO_LABEL[t.priorite] ?? t.priorite}
+              </span>
+              {t.projet_titre && <span className="badge badge-violet text-[10px]">{t.projet_titre}</span>}
+              {t.date_echeance && (
+                <span className="text-[11px] flex items-center gap-1" style={{ color: overdue ? "#ef4444" : "#7a7a78" }}>
+                  <CalendarDays size={11} />
+                  {new Date(t.date_echeance + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+                </span>
+              )}
+            </div>
+
+            {parseContextes(t.contexte).length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {parseContextes(t.contexte).map((c) => (
+                  <span key={c} className="text-[11px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "#f0eeed", color: "#7a7a78" }}>{c}</span>
+                ))}
+              </div>
+            )}
+
+            {t.notes && (
+              <p className="text-xs leading-snug" style={{ color: "#7a7a78" }}>{t.notes}</p>
+            )}
+
+            <button
+              onClick={() => { onEdit(t); setSelected(null); }}
+              className="btn-primary text-xs py-1.5 w-full flex items-center justify-center gap-1.5"
+            >
+              <Pencil size={12} /> Modifier
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Legend */}
       {groupNodes.length > 0 && (
