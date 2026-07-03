@@ -9,7 +9,14 @@ export async function PATCH(
   const { id } = await params;
   const body = await req.json();
 
-  const allowed = ["pdf_path", "notes", "rpe"];
+  const allowed = [
+    "date", "duree", "rpe", "meteo", "notes",
+    "groupe_musculaire", "exercice", "series", "repetitions", "charge", "programme",
+    "type_course", "distance", "temps_min", "denivele", "fc_moyenne",
+    "site", "voie", "cotation", "style_escalade", "resultat",
+    "sommet", "massif", "altitude", "cotation_globale", "partenaires", "bivouac", "rapport",
+    "pdf_path",
+  ];
   const fields = Object.keys(body).filter((k) => allowed.includes(k));
   if (!fields.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
 

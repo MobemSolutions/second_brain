@@ -6,13 +6,13 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const db = await getDb();
   const discipline = req.nextUrl.searchParams.get("discipline");
-  const limit = req.nextUrl.searchParams.get("limit") || "20";
+  const limit = Math.min(parseInt(req.nextUrl.searchParams.get("limit") || "20") || 20, 100);
 
   const query = discipline
     ? "SELECT * FROM sport WHERE discipline = ? ORDER BY date DESC, created_at DESC LIMIT ?"
     : "SELECT * FROM sport ORDER BY date DESC, created_at DESC LIMIT ?";
 
-  const args = discipline ? [discipline, parseInt(limit)] : [parseInt(limit)];
+  const args = discipline ? [discipline, limit] : [limit];
   return NextResponse.json(await db.prepare(query).all(...args));
 }
 

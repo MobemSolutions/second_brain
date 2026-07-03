@@ -231,6 +231,9 @@ async function migrate(client: Client): Promise<void> {
       UNIQUE(date, habit_id)
     )`);
   } catch {}
+  await addCol(client, "inbox", "destination_id", "INTEGER");
+  await addCol(client, "taches", "inbox_id", "INTEGER REFERENCES inbox(id) ON DELETE SET NULL");
+  await addCol(client, "projets", "inbox_id", "INTEGER REFERENCES inbox(id) ON DELETE SET NULL");
   await migrateHabitsV2(client);
 }
 
@@ -328,6 +331,7 @@ async function initSchema(client: Client): Promise<void> {
       url        TEXT,
       traite     INTEGER DEFAULT 0,
       destination TEXT,
+      destination_id INTEGER,
       notes      TEXT,
       created_at TEXT DEFAULT (datetime('now','localtime')),
       updated_at TEXT DEFAULT (datetime('now','localtime'))
@@ -345,6 +349,7 @@ async function initSchema(client: Client): Promise<void> {
       okr_trimestre  TEXT,
       annee          INTEGER,
       notes          TEXT,
+      inbox_id       INTEGER REFERENCES inbox(id) ON DELETE SET NULL,
       created_at     TEXT DEFAULT (datetime('now','localtime')),
       updated_at     TEXT DEFAULT (datetime('now','localtime'))
     );
@@ -360,6 +365,7 @@ async function initSchema(client: Client): Promise<void> {
       contexte       TEXT,
       energie        TEXT,
       notes          TEXT,
+      inbox_id       INTEGER REFERENCES inbox(id) ON DELETE SET NULL,
       created_at     TEXT DEFAULT (datetime('now','localtime'))
     );
 
