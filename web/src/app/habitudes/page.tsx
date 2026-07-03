@@ -59,7 +59,11 @@ function calcScore(defs: HabitDef[], values: Record<number, number | null | unde
     if (d.score_impact === "positif") pos++;
     else neg++;
   }
-  return Math.max(0, Math.min(10, pos * 2 - neg));
+  // How many positive habits it takes to fill the bar — scales with the
+  // total so adding more habits doesn't make a perfect day trivially easy.
+  const positifTotal = defs.filter((d) => d.score_impact === "positif").length;
+  const target = Math.max(20, Math.round(positifTotal * 0.5));
+  return Math.max(0, Math.min(10, Math.round((pos / target) * 10 - neg)));
 }
 
 function scoreColor(s: number): string {
