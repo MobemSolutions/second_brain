@@ -51,7 +51,6 @@ const TABS: { id: Disc; label: string; icon: string }[] = [
 
 const NAGES = ["Crawl", "Dos", "Brasse", "Papillon", "4 Nages"];
 
-const GROUPES = ["Dos", "Pectoraux", "Épaules", "Biceps", "Triceps", "Jambes", "Abdos", "Full body"];
 const COTATIONS = ["4", "4+", "5a", "5b", "5c", "6a", "6a+", "6b", "6b+", "6c", "6c+", "7a", "7a+", "7b", "7b+", "7c", "7c+", "8a"];
 const COTATIONS_ALPI = ["F", "PD-", "PD", "PD+", "AD-", "AD", "AD+", "D-", "D", "D+", "TD-", "TD", "TD+", "ED"];
 const RESULTATS = ["🌟 Flash", "✅ Enchainement", "👀 À vue", "🔧 Travaillée", "📌 Projet"];
@@ -450,45 +449,14 @@ export default function SportPage() {
 
           {/* Musculation */}
           {tab === "musculation" && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-zinc-500 mb-1 block">Groupe musculaire</label>
-                <select className="select" value={form.groupe_musculaire as string}
-                  onChange={(e) => f("groupe_musculaire", e.target.value)}>
-                  <option value="">—</option>
-                  {GROUPES.map((g) => <option key={g}>{g}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-zinc-500 mb-1 block">Exercice principal</label>
-                <input className="input" placeholder="Squat, Bench…" value={form.exercice as string}
-                  onChange={(e) => f("exercice", e.target.value)} />
-              </div>
-              <div>
-                <label className="text-xs text-zinc-500 mb-1 block">Séries</label>
-                <input type="number" className="input" placeholder="5" value={form.series as string}
-                  onChange={(e) => f("series", e.target.value)} />
-              </div>
-              <div>
-                <label className="text-xs text-zinc-500 mb-1 block">Répétitions</label>
-                <input type="number" className="input" placeholder="5" value={form.repetitions as string}
-                  onChange={(e) => f("repetitions", e.target.value)} />
-              </div>
-              <div>
-                <label className="text-xs text-zinc-500 mb-1 block">Charge (kg)</label>
-                <input type="number" step="0.5" className="input" placeholder="80" value={form.charge as string}
-                  onChange={(e) => f("charge", e.target.value)} />
-              </div>
-              <div>
-                <label className="text-xs text-zinc-500 mb-1 block">Programme</label>
-                <select className="select" value={form.programme as string}
-                  onChange={(e) => f("programme", e.target.value)}>
-                  <option value="">—</option>
-                  {["PPL", "5x5", "Hypertrophie", "Force", "Full Body", "Libre"].map((p) => (
-                    <option key={p}>{p}</option>
-                  ))}
-                </select>
-              </div>
+            <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-sm text-zinc-400">
+                Le détail des exercices, séries et charges se suit désormais sur Nutrilens.
+              </p>
+              <a href="https://nutrilens-bay.vercel.app/workout" target="_blank" rel="noopener noreferrer"
+                className="btn-primary text-xs py-1.5 px-3 shrink-0">
+                Ouvrir Nutrilens →
+              </a>
             </div>
           )}
 
