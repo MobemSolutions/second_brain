@@ -48,6 +48,7 @@ const nav = [
 export default function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const hidden = pathname === "/login";
 
   useEffect(() => {
     setOpen(false);
@@ -59,6 +60,8 @@ export default function Sidebar() {
       document.body.style.overflow = "";
     };
   }, [open]);
+
+  if (hidden) return null;
 
   return (
     <>
