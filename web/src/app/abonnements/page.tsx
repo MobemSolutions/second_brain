@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Trash2, ToggleLeft, ToggleRight, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Plus, Trash2, ToggleLeft, ToggleRight, AlertCircle, CheckCircle2, Pencil } from "lucide-react";
 
 interface Abonnement {
   id: number;
@@ -44,6 +44,7 @@ export default function AbonnementsPage() {
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState(INIT);
   const [filter, setFilter] = useState<"actifs" | "tous">("actifs");
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   const load = useCallback(() => {
     fetch("/api/abonnements").then((r) => r.json()).then(setAbos);
@@ -53,22 +54,48 @@ export default function AbonnementsPage() {
 
   const f = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
+  const closeModal = () => {
+    setModal(false);
+    setEditingId(null);
+    setForm(INIT);
+  };
+
+  const openEdit = (a: Abonnement) => {
+    setForm({
+      service: a.service,
+      categorie: a.categorie || "",
+      prix: String(a.prix ?? ""),
+      frequence: a.frequence,
+      date_renouvellement: a.date_renouvellement || "",
+      valeur_percue: a.valeur_percue != null ? String(a.valeur_percue) : "",
+      notes: a.notes || "",
+    });
+    setEditingId(a.id);
+    setModal(true);
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.service.trim()) return;
-    await fetch("/api/abonnements", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...form,
-        prix: parseFloat(form.prix) || 0,
-        valeur_percue: form.valeur_percue ? parseInt(form.valeur_percue) : null,
-        actif: true,
-        auto_renouvellement: true,
-      }),
-    });
-    setForm(INIT);
-    setModal(false);
+    const payload = {
+      ...form,
+      prix: parseFloat(form.prix) || 0,
+      valeur_percue: form.valeur_percue ? parseInt(form.valeur_percue) : null,
+    };
+    if (editingId) {
+      await fetch(`/api/abonnements/${editingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      await fetch("/api/abonnements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, actif: true, auto_renouvellement: true }),
+      });
+    }
+    closeModal();
     load();
   };
 
@@ -101,7 +128,7 @@ export default function AbonnementsPage() {
             {abos.filter((a) => a.actif).length} actifs · <span className="text-zinc-300">{totalMensuel.toFixed(2)}€/mois</span>
           </p>
         </div>
-        <button onClick={() => setModal(true)} className="btn-primary flex items-center gap-2">
+        <button onClick={() => { setEditingId(null); setForm(INIT); setModal(true); }} className="btn-primary flex items-center gap-2">
           <Plus size={15} /> Ajouter
         </button>
       </div>
@@ -209,9 +236,12 @@ export default function AbonnementsPage() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
                   <button onClick={() => toggle(a)} className="btn-ghost p-2" title={a.actif ? "Désactiver" : "Activer"}>
                     {a.actif ? <ToggleRight size={15} className="text-emerald-400" /> : <ToggleLeft size={15} />}
+                  </button>
+                  <button onClick={() => openEdit(a)} className="btn-ghost p-2" title="Modifier">
+                    <Pencil size={13} />
                   </button>
                   <button onClick={() => del(a.id)} className="btn-danger">
                     <Trash2 size={13} />
@@ -225,9 +255,11 @@ export default function AbonnementsPage() {
 
       {/* Modal */}
       {modal && (
-        <div className="modal-overlay" onClick={() => setModal(false)}>
+        <div className="modal-overlay" onClick={closeModal}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-base font-semibold text-zinc-100 mb-5">Nouvel abonnement</h2>
+            <h2 className="text-base font-semibold text-zinc-100 mb-5">
+              {editingId ? "Modifier l'abonnement" : "Nouvel abonnement"}
+            </h2>
             <form onSubmit={submit} className="space-y-3">
               <input autoFocus placeholder="Service (Netflix, Spotify…)" className="input"
                 value={form.service} onChange={(e) => f("service", e.target.value)} required />
@@ -259,8 +291,8 @@ export default function AbonnementsPage() {
               <input placeholder="Notes (identifiants, annulation…)" className="input"
                 value={form.notes} onChange={(e) => f("notes", e.target.value)} />
               <div className="flex gap-2 justify-end pt-2">
-                <button type="button" onClick={() => setModal(false)} className="btn-ghost">Annuler</button>
-                <button type="submit" className="btn-primary">Ajouter</button>
+                <button type="button" onClick={closeModal} className="btn-ghost">Annuler</button>
+                <button type="submit" className="btn-primary">{editingId ? "Enregistrer" : "Ajouter"}</button>
               </div>
             </form>
           </div>
