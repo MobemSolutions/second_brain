@@ -34,7 +34,8 @@ export default function MindMapView({ taches, onAdd, onEdit }: SharedViewProps &
   const [dragging, setDragging] = useState(false);
 
   const svgRef = useRef<SVGSVGElement>(null);
-  const dragRef = useRef<{ startX: number; startY: number; viewX: number; viewY: number; moved: boolean } | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; viewX: number; viewY: number } | null>(null);
+  const draggedRef = useRef(false);
 
   const groups = useMemo(() => {
     const map: Record<string, typeof taches> = {};
@@ -104,28 +105,36 @@ export default function MindMapView({ taches, onAdd, onEdit }: SharedViewProps &
   };
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
-    (e.target as Element).setPointerCapture?.(e.pointerId);
-    dragRef.current = { startX: e.clientX, startY: e.clientY, viewX: view.x, viewY: view.y, moved: false };
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+    dragRef.current = { startX: e.clientX, startY: e.clientY, viewX: view.x, viewY: view.y };
+    draggedRef.current = false;
     setDragging(true);
   };
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const drag = dragRef.current;
     const rect = svgRef.current?.getBoundingClientRect();
-    if (!drag || !rect) return;
+    if (!drag || !rect) return; // only pan while the pointer is actually held down
     const dxClient = e.clientX - drag.startX;
     const dyClient = e.clientY - drag.startY;
-    if (Math.abs(dxClient) > 3 || Math.abs(dyClient) > 3) drag.moved = true;
+    if (Math.abs(dxClient) > 3 || Math.abs(dyClient) > 3) draggedRef.current = true;
     const dx = dxClient * (SVG_W / rect.width);
     const dy = dyClient * (SVG_H / rect.height);
     setView((v) => ({ ...v, x: drag.viewX + dx, y: drag.viewY + dy }));
   };
-  // Leave dragRef.current in place (with its `moved` flag) so the click
-  // event that follows pointerup can tell a drag from a tap/click.
-  const onPointerUp = () => setDragging(false);
+  const onPointerUp = () => {
+    dragRef.current = null; // stop panning as soon as the button is released
+    setDragging(false);
+  };
 
+  // draggedRef stays true for the single click event that follows a real
+  // drag (so it doesn't also open the edit modal / re-focus), then resets.
   const handleTaskClick = (task: (typeof taches)[0]) => {
-    if (dragRef.current?.moved) return;
+    if (draggedRef.current) { draggedRef.current = false; return; }
     onEdit(task);
+  };
+  const handleGroupClick = (x: number, y: number) => {
+    if (draggedRef.current) { draggedRef.current = false; return; }
+    focusOn(x, y);
   };
 
   return (
@@ -251,7 +260,7 @@ export default function MindMapView({ taches, onAdd, onEdit }: SharedViewProps &
               {/* Group nodes */}
               {groupNodes.map(({ key, x, y, color, tasks }) => (
                 <g key={`g-${key}`} style={{ cursor: "pointer" }}
-                  onClick={() => { if (!dragRef.current?.moved) focusOn(x, y); }}
+                  onClick={() => handleGroupClick(x, y)}
                 >
                   <circle cx={x} cy={y} r={20} fill={color} opacity="0.12" />
                   <circle cx={x} cy={y} r={14} fill={color} opacity="0.2" />
