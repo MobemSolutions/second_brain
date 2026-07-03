@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Plus, Trash2, CalendarDays, GripVertical, X } from "lucide-react";
+import { Plus, Trash2, Pencil, CalendarDays, GripVertical, X } from "lucide-react";
 import { type SharedViewProps, type Tache, PRIO_BORDER, isOverdue } from "./types";
 
 type Statut = "a_faire" | "en_cours" | "termine";
@@ -14,11 +14,27 @@ const COLS: { id: Statut; label: string; accent: string; bg: string; dot: string
 
 const EMPTY = { titre: "", projet_id: "", priorite: "moyenne", date_echeance: "", contexte: "" };
 
-interface Props extends SharedViewProps {
-  onRefresh: () => void;
+function handleTitleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>, setTitre: (v: string) => void) {
+  if (e.key !== "Enter") return;
+  const el = e.currentTarget;
+  if (e.ctrlKey || e.metaKey) {
+    e.preventDefault();
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    const next = el.value.slice(0, start) + "\n" + el.value.slice(end);
+    setTitre(next);
+    requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = start + 1; });
+  } else {
+    e.preventDefault();
+    el.form?.requestSubmit();
+  }
 }
 
-export default function KanbanView({ taches, projets, onDelete, onMove, onRefresh }: Props) {
+interface Props extends SharedViewProps {
+  onCreate: (payload: Record<string, unknown>) => Promise<void>;
+}
+
+export default function KanbanView({ taches, projets, onDelete, onMove, onEdit, onCreate }: Props) {
   const [addingIn, setAddingIn] = useState<Statut | null>(null);
   const [form, setForm] = useState(EMPTY);
   const [dragId, setDragId] = useState<number | null>(null);
@@ -27,19 +43,17 @@ export default function KanbanView({ taches, projets, onDelete, onMove, onRefres
 
   const f = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
-  const addTask = async (e: React.FormEvent, statut: Statut) => {
+  const addTask = (e: React.FormEvent, statut: Statut) => {
     e.preventDefault();
     if (!form.titre.trim()) return;
-    await fetch("/api/taches", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        titre: form.titre, projet_id: form.projet_id ? parseInt(form.projet_id) : null,
-        priorite: form.priorite, date_echeance: form.date_echeance || null,
-        contexte: form.contexte || null, statut,
-      }),
-    });
-    setForm(EMPTY); setAddingIn(null); onRefresh();
+    const payload = {
+      titre: form.titre, projet_id: form.projet_id ? parseInt(form.projet_id) : null,
+      priorite: form.priorite, date_echeance: form.date_echeance || null,
+      contexte: form.contexte || null, statut,
+    };
+    setForm(EMPTY);
+    setAddingIn(null);
+    onCreate(payload);
   };
 
   const byStatut = (s: Statut) => taches.filter((t) => t.statut === s);
@@ -54,7 +68,7 @@ export default function KanbanView({ taches, projets, onDelete, onMove, onRefres
             onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
             onDragEnter={(e) => { e.preventDefault(); dragCounters.current[col.id] = (dragCounters.current[col.id] || 0) + 1; setDragOverCol(col.id); }}
             onDragLeave={() => { dragCounters.current[col.id] = (dragCounters.current[col.id] || 0) - 1; if (dragCounters.current[col.id] <= 0) { dragCounters.current[col.id] = 0; setDragOverCol(null); } }}
-            onDrop={async (e) => { e.preventDefault(); dragCounters.current[col.id] = 0; setDragOverCol(null); if (dragId !== null) await onMove(dragId, col.id); }}
+            onDrop={(e) => { e.preventDefault(); dragCounters.current[col.id] = 0; setDragOverCol(null); if (dragId !== null) onMove(dragId, col.id); }}
           >
             <div className="flex items-center justify-between px-2 py-1.5 rounded"
               style={{ backgroundColor: isDragOver ? col.bg : "transparent", border: `1px solid ${isDragOver ? col.accent + "40" : "transparent"}`, transition: "all 0.15s ease" }}>
@@ -75,7 +89,8 @@ export default function KanbanView({ taches, projets, onDelete, onMove, onRefres
 
               {addingIn === col.id && (
                 <form onSubmit={(e) => addTask(e, col.id)} className="card space-y-2 p-3" style={{ borderTop: `3px solid ${col.accent}`, borderRadius: "5px" }}>
-                  <input autoFocus placeholder="Titre…" className="input text-sm py-1.5" value={form.titre} onChange={(e) => f("titre", e.target.value)} required />
+                  <textarea autoFocus rows={2} placeholder="Titre… (Ctrl+Entrée = retour à la ligne)" className="input text-sm py-1.5"
+                    value={form.titre} onChange={(e) => f("titre", e.target.value)} onKeyDown={(e) => handleTitleKeyDown(e, (v) => f("titre", v))} required />
                   <input placeholder="Contexte — @sport, @finance…" className="input text-sm py-1.5" value={form.contexte} onChange={(e) => f("contexte", e.target.value)} />
                   <select className="select text-sm py-1.5" value={form.projet_id} onChange={(e) => f("projet_id", e.target.value)}>
                     <option value="">Aucun projet</option>
@@ -110,11 +125,17 @@ export default function KanbanView({ taches, projets, onDelete, onMove, onRefres
                   >
                     <div className="flex items-start gap-1.5 mb-2">
                       <GripVertical size={12} style={{ color: "#d0ceca", marginTop: "2px", flexShrink: 0 }} />
-                      <p className="text-sm flex-1 leading-snug" style={{ color: t.statut === "termine" ? "#b0aea9" : "#1a1a18", textDecoration: t.statut === "termine" ? "line-through" : "none" }}>{t.titre}</p>
-                      <button onClick={() => onDelete(t.id)} style={{ flexShrink: 0, color: "#d0ceca", padding: "2px", transition: "opacity 0.1s, color 0.1s" }} className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                        onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#d0ceca")}>
-                        <Trash2 size={12} />
-                      </button>
+                      <p className="text-sm flex-1 leading-snug whitespace-pre-line" style={{ color: t.statut === "termine" ? "#b0aea9" : "#1a1a18", textDecoration: t.statut === "termine" ? "line-through" : "none" }}>{t.titre}</p>
+                      <div className="flex items-center gap-0.5 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => onEdit(t)} style={{ color: "#d0ceca", padding: "2px" }} title="Modifier"
+                          onMouseEnter={(e) => (e.currentTarget.style.color = "#6d28d9")} onMouseLeave={(e) => (e.currentTarget.style.color = "#d0ceca")}>
+                          <Pencil size={12} />
+                        </button>
+                        <button onClick={() => onDelete(t.id)} style={{ color: "#d0ceca", padding: "2px" }} title="Supprimer"
+                          onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")} onMouseLeave={(e) => (e.currentTarget.style.color = "#d0ceca")}>
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {t.contexte && <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "#f0eeed", color: "#7a7a78" }}>{t.contexte}</span>}

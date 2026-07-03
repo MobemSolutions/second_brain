@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, Trash2, Plus } from "lucide-react";
+import { CalendarDays, Trash2, Pencil, Plus } from "lucide-react";
 import { type SharedViewProps, PRIO_BORDER, PRIO_DOT, PRIO_LABEL, isOverdue } from "./types";
 
 const STATUT_LABEL: Record<string, string> = {
@@ -11,7 +11,7 @@ const STATUT_COLOR: Record<string, string> = {
   a_faire: "#9ca3af", en_cours: "#7c3aed", termine: "#059669",
 };
 
-export default function GridView({ taches, projets, onDelete, onMove, onAdd }: SharedViewProps) {
+export default function GridView({ taches, projets, onDelete, onMove, onAdd, onEdit }: SharedViewProps) {
   const [filterContexte, setFilterContexte] = useState<string>("tous");
   const [filterStatut, setFilterStatut] = useState<string>("actif");
   const [filterPrio, setFilterPrio] = useState<string>("tous");
@@ -106,18 +106,25 @@ export default function GridView({ taches, projets, onDelete, onMove, onAdd }: S
               >
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <p
-                    className="text-sm font-medium leading-snug flex-1"
+                    className="text-sm font-medium leading-snug flex-1 whitespace-pre-line"
                     style={{ color: t.statut === "termine" ? "#b0aea9" : "#1a1a18", textDecoration: t.statut === "termine" ? "line-through" : "none" }}
                   >
                     {t.titre}
                   </p>
-                  <button onClick={() => onDelete(t.id)}
-                    className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded"
-                    style={{ color: "#d0ceca" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = "#d0ceca")}>
-                    <Trash2 size={13} />
-                  </button>
+                  <div className="flex items-center gap-0.5 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => onEdit(t)}
+                      className="p-1 rounded" style={{ color: "#d0ceca" }} title="Modifier"
+                      onMouseEnter={(e) => (e.currentTarget.style.color = "#6d28d9")}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = "#d0ceca")}>
+                      <Pencil size={13} />
+                    </button>
+                    <button onClick={() => onDelete(t.id)}
+                      className="p-1 rounded" style={{ color: "#d0ceca" }} title="Supprimer"
+                      onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = "#d0ceca")}>
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap mb-3">

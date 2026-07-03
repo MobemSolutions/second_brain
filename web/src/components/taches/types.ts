@@ -22,6 +22,7 @@ export interface SharedViewProps {
   onDelete: (id: number) => Promise<void>;
   onMove: (id: number, statut: string) => Promise<void>;
   onAdd: () => void;
+  onEdit: (t: Tache) => void;
 }
 
 export const PRIO_BORDER: Record<string, string> = {
