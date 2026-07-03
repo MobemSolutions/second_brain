@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CalendarDays, Trash2, Pencil, Plus } from "lucide-react";
-import { type SharedViewProps, PRIO_BORDER, PRIO_DOT, PRIO_LABEL, isOverdue } from "./types";
+import { type SharedViewProps, PRIO_BORDER, PRIO_DOT, PRIO_LABEL, isOverdue, parseContextes } from "./types";
 
 const STATUT_LABEL: Record<string, string> = {
   a_faire: "À faire", en_cours: "En cours", termine: "Terminé",
@@ -16,10 +16,10 @@ export default function GridView({ taches, projets, onDelete, onMove, onAdd, onE
   const [filterStatut, setFilterStatut] = useState<string>("actif");
   const [filterPrio, setFilterPrio] = useState<string>("tous");
 
-  const contextes = ["tous", ...Array.from(new Set(taches.map((t) => t.contexte).filter(Boolean))).sort()] as string[];
+  const contextes = ["tous", ...Array.from(new Set(taches.flatMap((t) => parseContextes(t.contexte)))).sort()];
 
   const filtered = taches.filter((t) => {
-    if (filterContexte !== "tous" && t.contexte !== filterContexte) return false;
+    if (filterContexte !== "tous" && !parseContextes(t.contexte).includes(filterContexte)) return false;
     if (filterStatut === "actif" && t.statut === "termine") return false;
     if (filterStatut !== "tous" && filterStatut !== "actif" && t.statut !== filterStatut) return false;
     if (filterPrio !== "tous" && t.priorite !== filterPrio) return false;
@@ -128,11 +128,11 @@ export default function GridView({ taches, projets, onDelete, onMove, onAdd, onE
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap mb-3">
-                  {t.contexte && (
-                    <span className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: "rgba(109,40,217,0.08)", color: "#6d28d9" }}>
-                      {t.contexte}
+                  {parseContextes(t.contexte).map((c) => (
+                    <span key={c} className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: "rgba(109,40,217,0.08)", color: "#6d28d9" }}>
+                      {c}
                     </span>
-                  )}
+                  ))}
                   {t.projet_titre && (
                     <span className="badge badge-violet text-[10px]">{t.projet_titre}</span>
                   )}

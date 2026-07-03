@@ -111,29 +111,31 @@ export default function HabitudesPage() {
   const todayStr = toLocalDateStr(new Date());
 
   const loadDefs = useCallback(() => {
-    fetch("/api/habit-definitions").then((r) => r.json()).then(setDefs);
+    fetch("/api/habit-definitions").then((r) => (r.ok ? r.json() : [])).then(setDefs).catch(() => {});
   }, []);
 
   const loadValuesToday = useCallback(() => {
     fetch(`/api/habit-values?date=${todayStr}`)
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : []))
       .then((rows: { habit_id: number; valeur: number | null }[]) => {
         const map: Record<number, number | null> = {};
         for (const r of rows) map[r.habit_id] = r.valeur;
         setValuesToday(map);
-      });
+      })
+      .catch(() => {});
   }, [todayStr]);
 
   const loadHistory = useCallback(() => {
-    fetch("/api/habit-values?days=35").then((r) => r.json()).then(setHistory);
+    fetch("/api/habit-values?days=35").then((r) => (r.ok ? r.json() : [])).then(setHistory).catch(() => {});
   }, []);
 
   const loadJournal = useCallback(() => {
     fetch(`/api/habitudes?date=${todayStr}`)
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : null))
       .then((data: { humeur?: number; energie?: number; notes?: string } | null) => {
         setJournal(data ? { humeur: data.humeur ?? null, energie: data.energie ?? null, notes: data.notes ?? "" } : { humeur: null, energie: null, notes: "" });
-      });
+      })
+      .catch(() => {});
   }, [todayStr]);
 
   useEffect(() => { loadDefs(); loadHistory(); }, [loadDefs, loadHistory]);
@@ -143,20 +145,28 @@ export default function HabitudesPage() {
 
   const numSaveTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
+  const postValue = useCallback((habitId: number, valeur: number | null) =>
+    fetch("/api/habit-values", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: todayStr, values: [{ habit_id: habitId, valeur }] }),
+    }), [todayStr]);
+
+  // Retries once after a short delay to ride through transient network/DB blips before giving up
   const saveValue = useCallback(async (habitId: number, valeur: number | null) => {
     try {
-      const res = await fetch("/api/habit-values", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: todayStr, values: [{ habit_id: habitId, valeur }] }),
-      });
+      let res = await postValue(habitId, valeur);
+      if (!res.ok) {
+        await new Promise((r) => setTimeout(r, 800));
+        res = await postValue(habitId, valeur);
+      }
       if (!res.ok) throw new Error();
       loadHistory();
       return true;
     } catch {
       return false;
     }
-  }, [todayStr, loadHistory]);
+  }, [postValue, loadHistory]);
 
   const setNum = (habitId: number, v: string) => {
     const parsed = v === "" ? null : parseFloat(v);

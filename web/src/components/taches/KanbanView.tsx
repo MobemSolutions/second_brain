@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Plus, Trash2, Pencil, CalendarDays, GripVertical, X } from "lucide-react";
-import { type SharedViewProps, type Tache, PRIO_BORDER, isOverdue } from "./types";
+import { type SharedViewProps, type Tache, PRIO_BORDER, isOverdue, parseContextes } from "./types";
 
 type Statut = "a_faire" | "en_cours" | "termine";
 
@@ -138,7 +138,9 @@ export default function KanbanView({ taches, projets, onDelete, onMove, onEdit, 
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      {t.contexte && <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "#f0eeed", color: "#7a7a78" }}>{t.contexte}</span>}
+                      {parseContextes(t.contexte).map((c) => (
+                        <span key={c} className="text-[11px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "#f0eeed", color: "#7a7a78" }}>{c}</span>
+                      ))}
                       {t.projet_titre && <span className="badge badge-violet text-[10px]">{t.projet_titre}</span>}
                       {t.date_echeance && (
                         <span className="text-[10px] flex items-center gap-0.5" style={{ color: overdue ? "#ef4444" : "#9c9c9a" }}>

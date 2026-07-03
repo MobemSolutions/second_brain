@@ -46,3 +46,8 @@ export const today = () => {
 export function isOverdue(t: Tache) {
   return t.date_echeance && t.date_echeance < today() && t.statut !== "termine";
 }
+
+export function parseContextes(contexte: string | null | undefined): string[] {
+  if (!contexte) return [];
+  return contexte.split(",").map((c) => c.trim()).filter(Boolean);
+}
