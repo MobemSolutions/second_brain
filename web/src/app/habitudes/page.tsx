@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Save, Plus, Pencil, Trash2, GripVertical } from "lucide-react";
 
 type Section = "metriques" | "general" | "matin" | "soir" | "ponctuel";
@@ -141,22 +141,45 @@ export default function HabitudesPage() {
 
   const score = calcScore(defs, valuesToday);
 
-  const setNum = (habitId: number, v: string) =>
-    setValuesToday((p) => ({ ...p, [habitId]: v === "" ? null : parseFloat(v) }));
+  const numSaveTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
-  const toggle = (habitId: number) =>
-    setValuesToday((p) => ({ ...p, [habitId]: p[habitId] ? 0 : 1 }));
+  const saveValue = useCallback(async (habitId: number, valeur: number | null) => {
+    try {
+      const res = await fetch("/api/habit-values", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: todayStr, values: [{ habit_id: habitId, valeur }] }),
+      });
+      if (!res.ok) throw new Error();
+      loadHistory();
+      return true;
+    } catch {
+      return false;
+    }
+  }, [todayStr, loadHistory]);
+
+  const setNum = (habitId: number, v: string) => {
+    const parsed = v === "" ? null : parseFloat(v);
+    setValuesToday((p) => ({ ...p, [habitId]: parsed }));
+    if (numSaveTimers.current[habitId]) clearTimeout(numSaveTimers.current[habitId]);
+    numSaveTimers.current[habitId] = setTimeout(async () => {
+      const ok = await saveValue(habitId, parsed);
+      if (!ok) alert("Échec de l'enregistrement — réessaie.");
+    }, 600);
+  };
+
+  const toggle = async (habitId: number) => {
+    const prevVal = valuesToday[habitId] ?? null;
+    const nextVal = prevVal ? 0 : 1;
+    setValuesToday((p) => ({ ...p, [habitId]: nextVal }));
+    const ok = await saveValue(habitId, nextVal);
+    if (!ok) {
+      setValuesToday((p) => ({ ...p, [habitId]: prevVal }));
+      alert("Échec de l'enregistrement — réessaie.");
+    }
+  };
 
   const save = async () => {
-    const values = defs.map((d) => ({
-      habit_id: d.id,
-      valeur: valuesToday[d.id] ?? (d.type === "checkbox" ? 0 : null),
-    }));
-    await fetch("/api/habit-values", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date: todayStr, values }),
-    });
     await fetch("/api/habitudes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -164,7 +187,6 @@ export default function HabitudesPage() {
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-    loadHistory();
   };
 
   const createHabit = async (section: Section, type: "checkbox" | "metric", form: typeof EMPTY_FORM) => {
@@ -306,10 +328,13 @@ export default function HabitudesPage() {
           />
         </div>
 
-        <button onClick={save} className={`btn-primary w-full flex items-center justify-center gap-2 ${saved ? "bg-emerald-600 hover:bg-emerald-500" : ""}`}>
-          <Save size={15} />
-          {saved ? "Sauvegardé !" : "Sauvegarder"}
-        </button>
+        <div>
+          <button onClick={save} className={`btn-primary w-full flex items-center justify-center gap-2 ${saved ? "bg-emerald-600 hover:bg-emerald-500" : ""}`}>
+            <Save size={15} />
+            {saved ? "Journal sauvegardé !" : "Sauvegarder le journal"}
+          </button>
+          <p className="text-[11px] text-zinc-600 mt-1.5 text-center">Les habitudes ci-dessus sont enregistrées automatiquement à chaque case cochée.</p>
+        </div>
       </div>
 
       {/* 35-day heatmap */}
@@ -384,18 +409,32 @@ function HabitSection({
   const isMetriques = section === "metriques";
   const done = !isMetriques ? defs.filter((d) => !!valuesToday[d.id]).length : 0;
 
-  const handleDrop = (e: React.DragEvent, targetId: number) => {
-    e.preventDefault();
-    const draggedId = Number(e.dataTransfer.getData("text/plain"));
-    if (!draggedId || draggedId === targetId) return;
-    const ids = defs.map((d) => d.id);
-    const fromIdx = ids.indexOf(draggedId);
-    const toIdx = ids.indexOf(targetId);
-    if (fromIdx === -1 || toIdx === -1) return;
-    ids.splice(fromIdx, 1);
-    ids.splice(toIdx, 0, draggedId);
-    onReorder(ids);
+  const [dragId, setDragId] = useState<number | null>(null);
+  const [dragOverId, setDragOverId] = useState<number | null>(null);
+
+  const handleDrop = (targetId: number) => {
+    if (dragId !== null && dragId !== targetId) {
+      const ids = defs.map((d) => d.id);
+      const fromIdx = ids.indexOf(dragId);
+      const toIdx = ids.indexOf(targetId);
+      if (fromIdx !== -1 && toIdx !== -1) {
+        ids.splice(fromIdx, 1);
+        ids.splice(toIdx, 0, dragId);
+        onReorder(ids);
+      }
+    }
+    setDragId(null);
+    setDragOverId(null);
   };
+
+  const dragProps = (id: number) => ({
+    draggable: true,
+    onDragStart: (e: React.DragEvent) => { setDragId(id); e.dataTransfer.effectAllowed = "move"; },
+    onDragEnd: () => { setDragId(null); setDragOverId(null); },
+    onDragOver: (e: React.DragEvent) => { e.preventDefault(); if (dragOverId !== id) setDragOverId(id); },
+    onDragLeave: () => setDragOverId((cur) => (cur === id ? null : cur)),
+    onDrop: (e: React.DragEvent) => { e.preventDefault(); handleDrop(id); },
+  });
 
   return (
     <div>
@@ -426,11 +465,10 @@ function HabitSection({
           {defs.map((d) => (
             <div
               key={d.id}
-              className="relative group cursor-grab active:cursor-grabbing"
-              draggable
-              onDragStart={(e) => e.dataTransfer.setData("text/plain", String(d.id))}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => handleDrop(e, d.id)}
+              className={`relative group cursor-grab active:cursor-grabbing rounded-lg transition-all ${
+                dragOverId === d.id && dragId !== d.id ? "ring-2 ring-violet-500 ring-offset-2 ring-offset-zinc-900" : ""
+              } ${dragId === d.id ? "opacity-40" : ""}`}
+              {...dragProps(d.id)}
             >
               <NumInput
                 label={d.emoji ? `${d.emoji} ${d.label}` : d.label}
@@ -452,11 +490,10 @@ function HabitSection({
             return (
               <div
                 key={d.id}
-                className="relative group cursor-grab active:cursor-grabbing"
-                draggable
-                onDragStart={(e) => e.dataTransfer.setData("text/plain", String(d.id))}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => handleDrop(e, d.id)}
+                className={`relative group cursor-grab active:cursor-grabbing rounded-lg transition-all ${
+                  dragOverId === d.id && dragId !== d.id ? "ring-2 ring-violet-500 ring-offset-2 ring-offset-zinc-900" : ""
+                } ${dragId === d.id ? "opacity-40" : ""}`}
+                {...dragProps(d.id)}
               >
                 <CheckItem
                   label={d.emoji ? `${d.emoji} ${d.label}` : d.label}
