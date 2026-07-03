@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Inbox, Target, CheckSquare,
-  Dumbbell, Apple, Heart, Film, CreditCard, Brain, HeartHandshake, CalendarClock, ShoppingCart,
+  Dumbbell, Apple, Heart, Film, CreditCard, HeartHandshake, CalendarClock, ShoppingCart,
   Menu, X,
 } from "lucide-react";
 
@@ -75,12 +76,7 @@ export default function Sidebar() {
           <Menu size={20} />
         </button>
         <div className="flex items-center gap-2 min-w-0">
-          <div
-            className="w-6 h-6 flex items-center justify-center shrink-0"
-            style={{ background: "#6d28d9", borderRadius: "5px" }}
-          >
-            <Brain size={12} className="text-white" />
-          </div>
+          <Image src="/logo.jpg" alt="" width={24} height={24} className="rounded-md shrink-0 object-contain" priority />
           <p className="text-[13px] font-semibold truncate" style={{ color: "#1a1a18" }}>
             Second Brain
           </p>
@@ -104,12 +100,7 @@ export default function Sidebar() {
         {/* Brand */}
         <div className="px-4 py-4 flex items-center justify-between" style={{ borderBottom: "1px solid #e4e2de" }}>
           <div className="flex items-center gap-2.5">
-            <div
-              className="w-7 h-7 flex items-center justify-center shrink-0"
-              style={{ background: "#6d28d9", borderRadius: "5px" }}
-            >
-              <Brain size={13} className="text-white" />
-            </div>
+            <Image src="/logo.jpg" alt="" width={28} height={28} className="rounded-md shrink-0 object-contain" priority />
             <div className="min-w-0">
               <p className="text-[13px] font-semibold truncate" style={{ color: "#1a1a18" }}>
                 Second Brain
