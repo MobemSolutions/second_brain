@@ -90,6 +90,17 @@ async function migrate(client: Client): Promise<void> {
       updated_at TEXT DEFAULT (datetime('now','localtime'))
     )`);
   } catch {}
+  // files table: uploaded PDFs live in Turso now, not on the serverless
+  // filesystem (which is ephemeral/read-only on Vercel — uploads used to
+  // fail there with "Échec de l'envoi du PDF").
+  try {
+    await client.execute(`CREATE TABLE IF NOT EXISTS files (
+      filename    TEXT PRIMARY KEY,
+      mime_type   TEXT NOT NULL,
+      data        BLOB NOT NULL,
+      created_at  TEXT DEFAULT (datetime('now','localtime'))
+    )`);
+  } catch {}
   await addCol(client, "taches", "date_debut", "TEXT");
   await addCol(client, "habitudes", "nofap", "INTEGER DEFAULT 0");
   await addCol(client, "habitudes", "brossage_matin", "INTEGER DEFAULT 0");
@@ -459,6 +470,13 @@ async function initSchema(client: Client): Promise<void> {
       notes      TEXT,
       pdf_path   TEXT,
       created_at TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS files (
+      filename    TEXT PRIMARY KEY,
+      mime_type   TEXT NOT NULL,
+      data        BLOB NOT NULL,
+      created_at  TEXT DEFAULT (datetime('now','localtime'))
     );
   `);
 }

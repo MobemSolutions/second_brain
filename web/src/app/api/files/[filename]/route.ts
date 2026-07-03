@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFileSync, existsSync } from "fs";
-import path from "path";
+import { getDb } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -13,17 +12,16 @@ export async function GET(
   if (filename.includes("..") || filename.includes("/") || filename.includes("\\"))
     return new NextResponse("Forbidden", { status: 403 });
 
-  const dataDir = process.env.DB_PATH
-    ? path.dirname(process.env.DB_PATH)
-    : path.join(process.cwd(), "data");
+  const db = await getDb();
+  const row = await db.prepare("SELECT mime_type, data FROM files WHERE filename = ?").get(filename) as
+    | { mime_type: string; data: ArrayBuffer }
+    | undefined;
 
-  const filePath = path.join(dataDir, "attachments", filename);
-  if (!existsSync(filePath)) return new NextResponse("Not found", { status: 404 });
+  if (!row) return new NextResponse("Not found", { status: 404 });
 
-  const file = readFileSync(filePath);
-  return new NextResponse(file, {
+  return new NextResponse(Buffer.from(row.data), {
     headers: {
-      "Content-Type": "application/pdf",
+      "Content-Type": row.mime_type || "application/pdf",
       "Content-Disposition": `inline; filename="${filename}"`,
     },
   });
