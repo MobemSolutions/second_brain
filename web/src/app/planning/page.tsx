@@ -81,9 +81,13 @@ export default function PlanningPage() {
 
   const [showCarteForm, setShowCarteForm] = useState(false);
   const [carteForm, setCarteForm] = useState({ titre: "", emoji: "", couleur: COULEURS[0] });
+  const [editingCarteId, setEditingCarteId] = useState<number | null>(null);
 
   const [editingCreneau, setEditingCreneau] = useState<Creneau | null>(null);
   const [editForm, setEditForm] = useState({ heure_debut: "", heure_fin: "" });
+
+  const [dragCarteId, setDragCarteId] = useState<number | null>(null);
+  const [dragCreneauId, setDragCreneauId] = useState<number | null>(null);
 
   const [pxPerMin, setPxPerMin] = useState(PX_PER_MIN_DEFAULT);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -165,21 +169,55 @@ export default function PlanningPage() {
     loadTemplates();
   };
 
+  const closeCarteForm = () => {
+    setShowCarteForm(false);
+    setEditingCarteId(null);
+    setCarteForm({ titre: "", emoji: "", couleur: COULEURS[0] });
+  };
+
+  const openEditCarte = (c: Carte) => {
+    setCarteForm({ titre: c.titre, emoji: c.emoji || "", couleur: c.couleur || COULEURS[0] });
+    setEditingCarteId(c.id);
+    setShowCarteForm(true);
+  };
+
   const submitCarte = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeId || !carteForm.titre.trim()) return;
+    const payload = {
+      titre: carteForm.titre.trim(),
+      emoji: carteForm.emoji || null,
+      couleur: carteForm.couleur,
+    };
+    if (editingCarteId) {
+      await fetch(`/api/planning/cartes/${editingCarteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      await fetch("/api/planning/cartes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template_id: activeId, ...payload }),
+      });
+    }
+    closeCarteForm();
+    loadCartes();
+  };
+
+  const duplicateCarte = async (c: Carte) => {
+    if (!activeId) return;
     await fetch("/api/planning/cartes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         template_id: activeId,
-        titre: carteForm.titre.trim(),
-        emoji: carteForm.emoji || null,
-        couleur: carteForm.couleur,
+        titre: `${c.titre} (copie)`,
+        emoji: c.emoji,
+        couleur: c.couleur,
       }),
     });
-    setCarteForm({ titre: "", emoji: "", couleur: COULEURS[0] });
-    setShowCarteForm(false);
     loadCartes();
   };
 
@@ -196,11 +234,10 @@ export default function PlanningPage() {
     let startMin = snap15(DAY_START_MIN + y / pxPerMin);
     startMin = Math.max(DAY_START_MIN, Math.min(DAY_END_MIN - 15, startMin));
 
-    const creneauId = e.dataTransfer.getData("application/x-creneau-id");
-    const carteId = e.dataTransfer.getData("application/x-carte-id");
-
-    if (creneauId) {
-      const cr = creneaux.find((c) => c.id === Number(creneauId));
+    if (dragCreneauId != null) {
+      const crId = dragCreneauId;
+      setDragCreneauId(null);
+      const cr = creneaux.find((c) => c.id === crId);
       if (!cr) return;
       const duration = timeToMinutes(cr.heure_fin) - timeToMinutes(cr.heure_debut);
       let endMin = startMin + duration;
@@ -211,14 +248,16 @@ export default function PlanningPage() {
         body: JSON.stringify({ jour, heure_debut: minutesToTime(startMin), heure_fin: minutesToTime(endMin) }),
       });
       loadCreneaux();
-    } else if (carteId && activeId) {
+    } else if (dragCarteId != null && activeId) {
+      const carteId = dragCarteId;
+      setDragCarteId(null);
       const endMin = Math.min(DAY_END_MIN, startMin + 60);
       await fetch("/api/planning/creneaux", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           template_id: activeId,
-          carte_id: Number(carteId),
+          carte_id: carteId,
           jour,
           heure_debut: minutesToTime(startMin),
           heure_fin: minutesToTime(endMin),
@@ -398,13 +437,23 @@ export default function PlanningPage() {
           <div className="card space-y-3">
             <div className="flex items-center justify-between">
               <p className="section-label">Mes cartes</p>
-              <button onClick={() => setShowCarteForm((v) => !v)} className="btn-ghost text-xs flex items-center gap-1.5 py-1">
+              <button
+                onClick={() => {
+                  if (showCarteForm) { closeCarteForm(); return; }
+                  setEditingCarteId(null);
+                  setShowCarteForm(true);
+                }}
+                className="btn-ghost text-xs flex items-center gap-1.5 py-1"
+              >
                 <Plus size={13} /> Nouvelle carte
               </button>
             </div>
 
             {showCarteForm && (
               <form onSubmit={submitCarte} className="flex items-end gap-3 flex-wrap p-3 rounded-lg border border-zinc-800">
+                {editingCarteId && (
+                  <p className="w-full text-xs text-zinc-500 -mb-1">Modifier la carte</p>
+                )}
                 <div>
                   <label className="text-xs text-zinc-500 mb-1 block">Titre</label>
                   <input
@@ -461,7 +510,14 @@ export default function PlanningPage() {
                     </label>
                   </div>
                 </div>
-                <button type="submit" className="btn-primary py-1.5 px-3 text-xs">Créer</button>
+                <div className="flex items-center gap-1.5">
+                  {editingCarteId && (
+                    <button type="button" onClick={closeCarteForm} className="btn-ghost py-1.5 px-3 text-xs">Annuler</button>
+                  )}
+                  <button type="submit" className="btn-primary py-1.5 px-3 text-xs">
+                    {editingCarteId ? "Enregistrer" : "Créer"}
+                  </button>
+                </div>
               </form>
             )}
 
@@ -473,14 +529,30 @@ export default function PlanningPage() {
                   <div
                     key={c.id}
                     draggable
-                    onDragStart={(e) => e.dataTransfer.setData("application/x-carte-id", String(c.id))}
+                    onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(c.id)); setDragCarteId(c.id); }}
+                    onDragEnd={() => setDragCarteId(null)}
                     className="group flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-lg border cursor-grab active:cursor-grabbing text-sm"
                     style={{ borderColor: "#e4e2de", borderLeftColor: c.couleur || "#6d28d9", borderLeftWidth: 3, backgroundColor: "#fafaf9" }}
                   >
                     <span>{c.emoji || "•"}</span>
                     <span className="text-zinc-300">{c.titre}</span>
                     <button
+                      onClick={() => openEditCarte(c)}
+                      title="Modifier"
+                      className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-violet-500 transition-all p-0.5"
+                    >
+                      <Pencil size={11} />
+                    </button>
+                    <button
+                      onClick={() => duplicateCarte(c)}
+                      title="Dupliquer"
+                      className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-violet-500 transition-all p-0.5"
+                    >
+                      <Copy size={11} />
+                    </button>
+                    <button
                       onClick={() => deleteCarte(c.id)}
+                      title="Supprimer"
                       className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-400 transition-all p-0.5"
                     >
                       <X size={11} />
@@ -559,7 +631,8 @@ export default function PlanningPage() {
                         <div
                           key={cr.id}
                           draggable
-                          onDragStart={(e) => { e.dataTransfer.setData("application/x-creneau-id", String(cr.id)); e.stopPropagation(); }}
+                          onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(cr.id)); e.stopPropagation(); setDragCreneauId(cr.id); }}
+                          onDragEnd={() => setDragCreneauId(null)}
                           onClick={() => openEdit(cr)}
                           className="absolute rounded-md overflow-hidden cursor-grab active:cursor-grabbing text-[11px] leading-tight transition-shadow hover:shadow-sm"
                           style={{
