@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, X, LayoutGrid, Columns2, CalendarDays, GanttChartSquare, GitFork } from "lucide-react";
 import KanbanView from "@/components/taches/KanbanView";
 import GridView from "@/components/taches/GridView";
 import CalendarView from "@/components/taches/CalendarView";
 import GanttView from "@/components/taches/GanttView";
 import MindMapView from "@/components/taches/MindMapView";
-import type { Tache, Projet } from "@/components/taches/types";
+import ContextInput from "@/components/taches/ContextInput";
+import { parseContextes, type Tache, type Projet } from "@/components/taches/types";
 
 type View = "kanban" | "grid" | "calendar" | "gantt" | "mindmap";
 
@@ -175,6 +176,10 @@ export default function TachesPage() {
 
   const sharedProps = { taches, projets, onDelete, onMove, onEdit: openEdit, onAdd: openNew };
   const active = taches.filter((t) => t.statut !== "termine").length;
+  const allContextes = useMemo(
+    () => Array.from(new Set(taches.flatMap((t) => parseContextes(t.contexte)))).sort(),
+    [taches]
+  );
 
   return (
     <div className="space-y-5" style={{ animation: "fade-up 0.2s ease-out" }}>
@@ -245,10 +250,11 @@ export default function TachesPage() {
                 autoFocus rows={2} placeholder="Titre de la tâche * (Ctrl+Entrée = retour à la ligne)" className="input"
                 value={form.titre} onChange={(e) => f("titre", e.target.value)} onKeyDown={(e) => handleTitleKeyDown(e, (v) => f("titre", v))} required
               />
-              <input
+              <ContextInput
                 placeholder="Contexte — @sport, @finance, @maison…"
                 className="input"
-                value={form.contexte} onChange={(e) => f("contexte", e.target.value)}
+                value={form.contexte} onChange={(v) => f("contexte", v)}
+                suggestions={allContextes}
               />
               <select className="select" value={form.projet_id} onChange={(e) => f("projet_id", e.target.value)}>
                 <option value="">Aucun projet</option>

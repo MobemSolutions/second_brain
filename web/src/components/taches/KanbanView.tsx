@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Plus, Trash2, Pencil, CalendarDays, GripVertical, X } from "lucide-react";
 import { type SharedViewProps, type Tache, PRIO_BORDER, isOverdue, parseContextes } from "./types";
+import ContextInput from "./ContextInput";
 
 type Statut = "a_faire" | "en_cours" | "termine";
 
@@ -42,6 +43,10 @@ export default function KanbanView({ taches, projets, onDelete, onMove, onEdit, 
   const dragCounters = useRef<Record<string, number>>({ a_faire: 0, en_cours: 0, termine: 0 });
 
   const f = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
+  const allContextes = useMemo(
+    () => Array.from(new Set(taches.flatMap((t) => parseContextes(t.contexte)))).sort(),
+    [taches]
+  );
 
   const addTask = (e: React.FormEvent, statut: Statut) => {
     e.preventDefault();
@@ -91,7 +96,7 @@ export default function KanbanView({ taches, projets, onDelete, onMove, onEdit, 
                 <form onSubmit={(e) => addTask(e, col.id)} className="card space-y-2 p-3" style={{ borderTop: `3px solid ${col.accent}`, borderRadius: "5px" }}>
                   <textarea autoFocus rows={2} placeholder="Titre… (Ctrl+Entrée = retour à la ligne)" className="input text-sm py-1.5"
                     value={form.titre} onChange={(e) => f("titre", e.target.value)} onKeyDown={(e) => handleTitleKeyDown(e, (v) => f("titre", v))} required />
-                  <input placeholder="Contexte — @sport, @finance…" className="input text-sm py-1.5" value={form.contexte} onChange={(e) => f("contexte", e.target.value)} />
+                  <ContextInput placeholder="Contexte — @sport, @finance…" className="input text-sm py-1.5" value={form.contexte} onChange={(v) => f("contexte", v)} suggestions={allContextes} />
                   <select className="select text-sm py-1.5" value={form.projet_id} onChange={(e) => f("projet_id", e.target.value)}>
                     <option value="">Aucun projet</option>
                     {projets.map((p) => <option key={p.id} value={p.id}>{p.titre}</option>)}
