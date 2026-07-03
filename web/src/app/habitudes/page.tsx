@@ -40,6 +40,13 @@ const SECTIONS: { key: Section; title: string }[] = [
   { key: "ponctuel", title: "Ponctuel" },
 ];
 
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function calcScore(defs: HabitDef[], values: Record<number, number | null | undefined>): number {
   let pos = 0, neg = 0;
   for (const d of defs) {
@@ -101,7 +108,7 @@ export default function HabitudesPage() {
   const [addingSection, setAddingSection] = useState<Section | null>(null);
   const [editingDef, setEditingDef] = useState<HabitDef | null>(null);
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = toLocalDateStr(new Date());
 
   const loadDefs = useCallback(() => {
     fetch("/api/habit-definitions").then((r) => r.json()).then(setDefs);
@@ -221,7 +228,7 @@ export default function HabitudesPage() {
   for (let i = 34; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().split("T")[0];
+    const dateStr = toLocalDateStr(d);
     const values = historyByDate.get(dateStr);
     gridDays.push({ date: dateStr, score: values ? calcScore(defs, values) : null });
   }

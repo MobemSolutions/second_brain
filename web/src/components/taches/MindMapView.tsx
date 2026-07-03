@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { type SharedViewProps, PRIO_DOT } from "./types";
+import { type SharedViewProps, PRIO_DOT, today } from "./types";
 
 type GroupBy = "contexte" | "projet" | "priorite";
 
@@ -120,7 +120,7 @@ export default function MindMapView({ taches, projets, onAdd }: SharedViewProps 
             {/* Task nodes */}
             {taskNodes.map(({ task, x, y, color }) => {
               const isH = hovered === task.id;
-              const isOverdue = task.date_echeance && task.date_echeance < new Date().toISOString().split("T")[0];
+              const isOverdue = task.date_echeance && task.date_echeance < today();
               const r = task.priorite === "haute" ? 7 : task.priorite === "moyenne" ? 5.5 : 4.5;
               const labelW = Math.min(100, task.titre.length * 5.5);
 

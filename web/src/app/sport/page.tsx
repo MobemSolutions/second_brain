@@ -57,8 +57,16 @@ const COTATIONS_ALPI = ["F", "PD-", "PD", "PD+", "AD-", "AD", "AD+", "D-", "D", 
 const RESULTATS = ["🌟 Flash", "✅ Enchainement", "👀 À vue", "🔧 Travaillée", "📌 Projet"];
 const METEO = ["☀️ Beau", "🌤️ Nuageux", "🌧️ Pluie", "❄️ Neige"];
 
+function todayLocal(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 const EMPTY_FORM: Record<string, string | number> = {
-  date: new Date().toISOString().split("T")[0],
+  date: todayLocal(),
   duree: "", rpe: "", meteo: "", notes: "",
   groupe_musculaire: "", exercice: "", series: "", repetitions: "", charge: "", programme: "",
   type_course: "", distance: "", temps_min: "", denivele: "", fc_moyenne: "",
@@ -251,7 +259,7 @@ export default function SportPage() {
   const repeatLast = () => {
     if (!sessions[0]) return;
     setEditingId(null);
-    setForm({ ...sessionToForm(sessions[0]), date: new Date().toISOString().split("T")[0], notes: "", rapport: "" });
+    setForm({ ...sessionToForm(sessions[0]), date: todayLocal(), notes: "", rapport: "" });
     setFormTouched(false);
     setError(null);
     setShowForm(true);
