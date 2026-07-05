@@ -5,3 +5,4 @@ export async function authToken(password: string): Promise<string> {
 }
 
 export const AUTH_COOKIE = "sb_auth";
+export const GUEST_COOKIE = "sb_guest";

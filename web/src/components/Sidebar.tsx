@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Inbox, Target, CheckSquare,
   Dumbbell, Apple, Heart, Film, CreditCard, HeartHandshake, CalendarClock, ShoppingCart,
-  Menu, X,
+  Menu, X, LogOut,
 } from "lucide-react";
 
 const nav = [
@@ -47,7 +47,9 @@ const nav = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [isGuest, setIsGuest] = useState(false);
   const hidden = pathname === "/login";
 
   useEffect(() => {
@@ -61,7 +63,25 @@ export default function Sidebar() {
     };
   }, [open]);
 
+  // Checked client-side (the guest cookie isn't HttpOnly on purpose) so the
+  // nav can hide Psy TCC without a network round-trip. The real barrier is
+  // server-side in middleware — this is just UX polish.
+  useEffect(() => {
+    setIsGuest(document.cookie.split("; ").some((c) => c === "sb_guest=1"));
+  }, [pathname]);
+
+  const exitGuest = async () => {
+    await fetch("/api/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  };
+
   if (hidden) return null;
+
+  const visibleNav = nav.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => !(isGuest && item.href === "/psy")),
+  }));
 
   return (
     <>
@@ -125,7 +145,7 @@ export default function Sidebar() {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto px-2 py-2">
-        {nav.map((section) => (
+        {visibleNav.map((section) => (
           <div key={section.group} className={section.label ? "mt-4" : ""}>
             {section.label && (
               <p className="section-label px-2 mb-1">{section.label}</p>
@@ -164,6 +184,18 @@ export default function Sidebar() {
           </div>
         ))}
       </nav>
+
+        {isGuest && (
+          <div className="px-2 py-3" style={{ borderTop: "1px solid #e4e2de" }}>
+            <button
+              onClick={exitGuest}
+              className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs w-full"
+              style={{ color: "#9c9c9a" }}
+            >
+              <LogOut size={13} /> Quitter le mode invité
+            </button>
+          </div>
+        )}
 
         <style>{`
           .sidebar-link:hover {

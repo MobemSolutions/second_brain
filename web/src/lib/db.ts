@@ -1,4 +1,36 @@
 import { createClient, type Client, type InArgs, type InValue } from "@libsql/client";
+import { headers } from "next/headers";
+
+// Tables mirrored for guest sessions (see initGuestSchema). Anything not
+// listed here (settings, the psy_* tables) has no guest-scoped twin.
+const GUEST_TABLES = [
+  "inbox", "projets", "taches", "sport", "habitudes", "abonnements", "media",
+  "nutrition", "nutrition_profile", "files", "pinned_files",
+  "planning_templates", "planning_cartes", "planning_creneaux",
+  "courses", "habit_definitions", "habit_values",
+];
+
+// Rewrites table names to their guest_ twin, anchored to the SQL keyword
+// that precedes a table reference (FROM/INTO/UPDATE/JOIN) so this can never
+// touch a table name that happens to appear elsewhere in a query.
+function scopeSql(sql: string, guest: boolean): string {
+  if (!guest) return sql;
+  let out = sql;
+  for (const t of GUEST_TABLES) {
+    const re = new RegExp(`\\b(FROM|INTO|UPDATE|JOIN)(\\s+)${t}\\b`, "gi");
+    out = out.replace(re, (_m, kw: string, ws: string) => `${kw}${ws}guest_${t}`);
+  }
+  return out;
+}
+
+async function currentScope(): Promise<"owner" | "guest"> {
+  try {
+    const h = await headers();
+    return h.get("x-sb-scope") === "guest" ? "guest" : "owner";
+  } catch {
+    return "owner";
+  }
+}
 
 export interface Stmt {
   get(...args: InValue[]): Promise<Record<string, unknown> | undefined>;
@@ -13,14 +45,16 @@ export interface Db {
 
 let _client: Client | null = null;
 let _ready: Promise<void> | null = null;
+let _guestReady: Promise<void> | null = null;
 
 function rowToObject(row: Record<string, unknown>): Record<string, unknown> {
   return { ...row };
 }
 
-function wrap(client: Client): Db {
+function wrap(client: Client, guest = false): Db {
   return {
-    prepare(sql: string): Stmt {
+    prepare(rawSql: string): Stmt {
+      const sql = scopeSql(rawSql, guest);
       return {
         async get(...args: InValue[]) {
           const r = await client.execute({ sql, args: args as InArgs });
@@ -37,7 +71,7 @@ function wrap(client: Client): Db {
       };
     },
     async exec(sql: string) {
-      await client.executeMultiple(sql);
+      await client.executeMultiple(scopeSql(sql, guest));
     },
   };
 }
@@ -51,7 +85,19 @@ export async function getDb(): Promise<Db> {
     _ready = bootstrap(_client);
   }
   await _ready;
-  return wrap(_client);
+  const client = _client;
+
+  if ((await currentScope()) === "guest") {
+    if (!_guestReady) {
+      _guestReady = (async () => {
+        await initGuestSchema(client);
+        await seedGuestHabits(client);
+      })();
+    }
+    await _guestReady;
+    return wrap(client, true);
+  }
+  return wrap(client);
 }
 
 async function bootstrap(client: Client): Promise<void> {
@@ -479,4 +525,297 @@ async function initSchema(client: Client): Promise<void> {
       created_at  TEXT DEFAULT (datetime('now','localtime'))
     );
   `);
+}
+
+// Guest sandbox: mirrors the CURRENT final shape of each owner table (not a
+// replay of the historical addCol/migrate steps — a fresh guest table has no
+// legacy data to accommodate). Kept in sync manually whenever the owner
+// schema changes. psy_* and settings are intentionally not mirrored.
+async function initGuestSchema(client: Client): Promise<void> {
+  await client.executeMultiple(`
+    CREATE TABLE IF NOT EXISTS guest_inbox (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      titre      TEXT NOT NULL,
+      type       TEXT DEFAULT 'note',
+      contexte   TEXT,
+      priorite   TEXT DEFAULT 'moyenne',
+      url        TEXT,
+      traite     INTEGER DEFAULT 0,
+      destination TEXT,
+      destination_id INTEGER,
+      notes      TEXT,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      updated_at TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS guest_projets (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      titre          TEXT NOT NULL,
+      statut         TEXT DEFAULT 'a_faire',
+      priorite       TEXT DEFAULT 'normal',
+      piliers        TEXT,
+      date_debut     TEXT,
+      deadline       TEXT,
+      avancement     INTEGER DEFAULT 0,
+      okr_trimestre  TEXT,
+      annee          INTEGER,
+      notes          TEXT,
+      description    TEXT,
+      couleur        TEXT,
+      inbox_id       INTEGER REFERENCES guest_inbox(id) ON DELETE SET NULL,
+      created_at     TEXT DEFAULT (datetime('now','localtime')),
+      updated_at     TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS guest_taches (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      titre          TEXT NOT NULL,
+      projet_id      INTEGER REFERENCES guest_projets(id) ON DELETE SET NULL,
+      statut         TEXT DEFAULT 'a_faire',
+      priorite       TEXT DEFAULT 'moyenne',
+      date_debut     TEXT,
+      date_echeance  TEXT,
+      duree_estimee  INTEGER,
+      contexte       TEXT,
+      energie        TEXT,
+      notes          TEXT,
+      inbox_id       INTEGER REFERENCES guest_inbox(id) ON DELETE SET NULL,
+      created_at     TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS guest_sport (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      discipline       TEXT NOT NULL,
+      date             TEXT NOT NULL,
+      duree            INTEGER,
+      rpe              INTEGER,
+      meteo            TEXT,
+      notes            TEXT,
+      groupe_musculaire TEXT,
+      exercice         TEXT,
+      series           INTEGER,
+      repetitions      INTEGER,
+      charge           REAL,
+      programme        TEXT,
+      type_course      TEXT,
+      distance         REAL,
+      temps_min        REAL,
+      denivele         INTEGER,
+      fc_moyenne       INTEGER,
+      site             TEXT,
+      voie             TEXT,
+      cotation         TEXT,
+      style_escalade   TEXT,
+      resultat         TEXT,
+      sommet           TEXT,
+      massif           TEXT,
+      altitude         INTEGER,
+      cotation_globale TEXT,
+      partenaires      TEXT,
+      bivouac          INTEGER DEFAULT 0,
+      rapport          TEXT,
+      pdf_path         TEXT,
+      created_at       TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS guest_habitudes (
+      id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+      date                 TEXT NOT NULL UNIQUE,
+      sommeil              REAL,
+      eau                  REAL,
+      meditation           INTEGER,
+      lecture              INTEGER,
+      sport_fait           INTEGER DEFAULT 0,
+      alcool               INTEGER DEFAULT 0,
+      ecran_dodo           INTEGER DEFAULT 0,
+      nofap                INTEGER DEFAULT 0,
+      humeur               INTEGER,
+      energie              INTEGER,
+      notes                TEXT,
+      brossage_matin       INTEGER DEFAULT 0,
+      brossage_soir        INTEGER DEFAULT 0,
+      gratte_langue        INTEGER DEFAULT 0,
+      fil_dentaire         INTEGER DEFAULT 0,
+      creme_solaire        INTEGER DEFAULT 0,
+      soin_peau_soir       INTEGER DEFAULT 0,
+      skin_icing           INTEGER DEFAULT 0,
+      gouttes_cernes       INTEGER DEFAULT 0,
+      bonnet_satin         INTEGER DEFAULT 0,
+      flexibilite          INTEGER DEFAULT 0,
+      jawline              INTEGER DEFAULT 0,
+      neck_curls           INTEGER DEFAULT 0,
+      soin_visage_lavage   INTEGER DEFAULT 0,
+      soin_visage_rincage  INTEGER DEFAULT 0,
+      soin_visage_creme    INTEGER DEFAULT 0,
+      bain_bouche          INTEGER DEFAULT 0,
+      exfoliant            INTEGER DEFAULT 0,
+      epilation_sourcils   INTEGER DEFAULT 0,
+      rasage_corps         INTEGER DEFAULT 0,
+      rasage_barbe         INTEGER DEFAULT 0,
+      pastille_dentaire    INTEGER DEFAULT 0,
+      pas                  INTEGER,
+      poids                REAL,
+      pompes               INTEGER,
+      created_at           TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS guest_abonnements (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      service             TEXT NOT NULL,
+      categorie           TEXT,
+      prix                REAL,
+      frequence           TEXT DEFAULT 'mensuel',
+      date_renouvellement TEXT,
+      auto_renouvellement INTEGER DEFAULT 1,
+      valeur_percue       INTEGER,
+      actif               INTEGER DEFAULT 1,
+      notes               TEXT,
+      created_at          TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS guest_media (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      titre      TEXT NOT NULL,
+      type       TEXT NOT NULL,
+      statut     TEXT DEFAULT 'a_voir',
+      note       INTEGER,
+      date_fin   TEXT,
+      genre      TEXT,
+      createur   TEXT,
+      plateforme TEXT,
+      avis       TEXT,
+      description TEXT,
+      casting    TEXT,
+      created_at TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS guest_nutrition (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      date       TEXT NOT NULL UNIQUE,
+      calories   INTEGER,
+      proteines  REAL,
+      glucides   REAL,
+      lipides    REAL,
+      notes      TEXT,
+      pdf_path   TEXT,
+      day_type   TEXT,
+      created_at TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS guest_nutrition_profile (
+      id              INTEGER PRIMARY KEY CHECK (id = 1),
+      poids           REAL,
+      taille          INTEGER,
+      age             INTEGER,
+      sexe            TEXT DEFAULT 'homme',
+      masse_grasse    REAL,
+      activite        TEXT DEFAULT 'modere',
+      objectif        TEXT DEFAULT 'seche',
+      deficit         INTEGER DEFAULT -400,
+      cible_calories  INTEGER,
+      cible_proteines INTEGER,
+      cible_glucides  INTEGER,
+      cible_lipides   INTEGER,
+      day_types       TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS guest_files (
+      filename    TEXT PRIMARY KEY,
+      mime_type   TEXT NOT NULL,
+      data        BLOB NOT NULL,
+      created_at  TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS guest_pinned_files (
+      key        TEXT PRIMARY KEY,
+      pdf_path   TEXT,
+      updated_at TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS guest_planning_templates (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      nom        TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS guest_planning_cartes (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      template_id INTEGER NOT NULL REFERENCES guest_planning_templates(id) ON DELETE CASCADE,
+      titre       TEXT NOT NULL,
+      emoji       TEXT,
+      couleur     TEXT,
+      created_at  TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS guest_planning_creneaux (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      template_id  INTEGER NOT NULL REFERENCES guest_planning_templates(id) ON DELETE CASCADE,
+      carte_id     INTEGER NOT NULL REFERENCES guest_planning_cartes(id) ON DELETE CASCADE,
+      jour         INTEGER NOT NULL,
+      heure_debut  TEXT NOT NULL,
+      heure_fin    TEXT NOT NULL,
+      created_at   TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS guest_courses (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      titre      TEXT NOT NULL,
+      categorie  TEXT,
+      tags       TEXT,
+      prix       REAL,
+      lien       TEXT,
+      achete     INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS guest_habit_definitions (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      cle          TEXT NOT NULL UNIQUE,
+      label        TEXT NOT NULL,
+      emoji        TEXT,
+      type         TEXT NOT NULL,
+      section      TEXT NOT NULL,
+      unite        TEXT,
+      cible        REAL,
+      target_freq  TEXT,
+      score_impact TEXT NOT NULL DEFAULT 'aucun',
+      actif        INTEGER DEFAULT 1,
+      ordre        INTEGER DEFAULT 0,
+      created_at   TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS guest_habit_values (
+      id       INTEGER PRIMARY KEY AUTOINCREMENT,
+      date     TEXT NOT NULL,
+      habit_id INTEGER NOT NULL REFERENCES guest_habit_definitions(id) ON DELETE CASCADE,
+      valeur   REAL,
+      UNIQUE(date, habit_id)
+    );
+  `);
+}
+
+// Seeds the same starter habit catalog owners get (HABIT_SEED, defined
+// above for migrateHabitsV2) into the guest tables, once ever — guarded by
+// a flag in the OWNER's settings table (internal bookkeeping only, not
+// guest-facing data, so it doesn't need a guest_settings table).
+async function seedGuestHabits(client: Client): Promise<void> {
+  const flagRes = await client.execute("SELECT value FROM settings WHERE key = 'guest_habits_seeded'");
+  const flag = flagRes.rows[0] as unknown as { value: string } | undefined;
+  if (flag?.value === "1") return;
+
+  const sectionCounters: Record<string, number> = {};
+  for (const s of HABIT_SEED) {
+    const ordre = sectionCounters[s.section] ?? 0;
+    sectionCounters[s.section] = ordre + 1;
+    await client.execute({
+      sql: `INSERT OR IGNORE INTO guest_habit_definitions (cle, label, type, section, unite, cible, target_freq, score_impact, ordre)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [s.cle, s.label, s.type, s.section, s.unite ?? null, s.cible ?? null, s.target_freq ?? null, s.score_impact, ordre],
+    });
+  }
+
+  await client.execute(
+    `INSERT INTO settings (key, value) VALUES ('guest_habits_seeded', '1')
+     ON CONFLICT(key) DO UPDATE SET value = '1'`
+  );
 }
