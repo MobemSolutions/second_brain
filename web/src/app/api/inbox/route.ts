@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { upsertEmbedding } from "@/lib/embeddings";
 
 export const dynamic = "force-dynamic";
 
@@ -58,9 +59,12 @@ export async function POST(req: NextRequest) {
       body.notes || null
     );
 
+  const id = Number(result.lastInsertRowid);
+  await upsertEmbedding(db, "inbox", id, `${body.titre}\n${body.notes ?? ""}`);
+
   const row = await db
     .prepare("SELECT * FROM inbox WHERE id = ?")
-    .get(Number(result.lastInsertRowid));
+    .get(id);
 
   return NextResponse.json(row, { status: 201 });
 }

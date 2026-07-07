@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { encryptText, decryptText } from "@/lib/crypto";
 
 export const dynamic = "force-dynamic";
+
+function withDecrypted(row: Record<string, unknown>) {
+  return { ...row, notes: decryptText(row.notes as string | null) };
+}
 
 export async function GET(req: NextRequest) {
   const db = await getDb();
@@ -13,7 +18,7 @@ export async function GET(req: NextRequest) {
         .all(`-${days}`)
     : await db.prepare("SELECT * FROM psy_seances ORDER BY date DESC, created_at DESC").all();
 
-  return NextResponse.json(rows);
+  return NextResponse.json(rows.map(withDecrypted));
 }
 
 export async function POST(req: NextRequest) {
@@ -24,8 +29,8 @@ export async function POST(req: NextRequest) {
     .prepare(
       `INSERT INTO psy_seances (date, titre, notes, pdf_path) VALUES (?, ?, ?, ?)`
     )
-    .run(b.date, b.titre || null, b.notes || null, b.pdf_path || null);
+    .run(b.date, b.titre || null, encryptText(b.notes || null), b.pdf_path || null);
 
   const row = await db.prepare("SELECT * FROM psy_seances WHERE id = ?").get(Number(result.lastInsertRowid));
-  return NextResponse.json(row, { status: 201 });
+  return NextResponse.json(row ? withDecrypted(row) : row, { status: 201 });
 }

@@ -1,5 +1,6 @@
 import { createClient, type Client, type InArgs, type InValue } from "@libsql/client";
 import { headers } from "next/headers";
+import { encryptText } from "./crypto";
 
 // Tables mirrored for guest sessions (see initGuestSchema). Anything not
 // listed here (settings, the psy_* tables) has no guest-scoped twin.
@@ -8,6 +9,7 @@ const GUEST_TABLES = [
   "nutrition", "nutrition_profile", "files", "pinned_files",
   "planning_templates", "planning_cartes", "planning_creneaux",
   "courses", "habit_definitions", "habit_values",
+  "notes", "liens", "embeddings",
 ];
 
 // Rewrites table names to their guest_ twin, anchored to the SQL keyword
@@ -291,7 +293,59 @@ async function migrate(client: Client): Promise<void> {
   await addCol(client, "inbox", "destination_id", "INTEGER");
   await addCol(client, "taches", "inbox_id", "INTEGER REFERENCES inbox(id) ON DELETE SET NULL");
   await addCol(client, "projets", "inbox_id", "INTEGER REFERENCES inbox(id) ON DELETE SET NULL");
+  await addCol(client, "habit_definitions", "prioritaire", "INTEGER DEFAULT 0");
   await migrateHabitsV2(client);
+  await migratePsyEncryption(client);
+}
+
+// Encrypts any pre-existing plaintext Psy TCC rows exactly once. Skipped
+// (and retried on next boot) while PSY_ENCRYPTION_KEY isn't configured yet,
+// so the app keeps working until the key is set rather than crashing.
+async function migratePsyEncryption(client: Client): Promise<void> {
+  const flagRes = await client.execute("SELECT value FROM settings WHERE key = 'psy_encryption_migrated'");
+  const flag = flagRes.rows[0] as unknown as { value: string } | undefined;
+  if (flag?.value === "1") return;
+  if (!process.env.PSY_ENCRYPTION_KEY) return;
+
+  const seances = (await client.execute("SELECT id, notes FROM psy_seances")).rows as unknown as
+    { id: number; notes: string | null }[];
+  for (const row of seances) {
+    if (row.notes) {
+      await client.execute({ sql: "UPDATE psy_seances SET notes = ? WHERE id = ?", args: [encryptText(row.notes), row.id] });
+    }
+  }
+
+  const exercices = (await client.execute("SELECT id, contenu, sensation, intelligence, monde FROM psy_exercices")).rows as unknown as
+    { id: number; contenu: string | null; sensation: string | null; intelligence: string | null; monde: string | null }[];
+  for (const row of exercices) {
+    await client.execute({
+      sql: "UPDATE psy_exercices SET contenu = ?, sensation = ?, intelligence = ?, monde = ? WHERE id = ?",
+      args: [encryptText(row.contenu), encryptText(row.sensation), encryptText(row.intelligence), encryptText(row.monde), row.id],
+    });
+  }
+
+  const observations = (await client.execute(
+    "SELECT id, contexte, emotions, pensees, comportements, comportements_entourage FROM psy_observations"
+  )).rows as unknown as {
+    id: number; contexte: string | null; emotions: string | null; pensees: string | null;
+    comportements: string | null; comportements_entourage: string | null;
+  }[];
+  for (const row of observations) {
+    await client.execute({
+      sql: `UPDATE psy_observations
+            SET contexte = ?, emotions = ?, pensees = ?, comportements = ?, comportements_entourage = ?
+            WHERE id = ?`,
+      args: [
+        encryptText(row.contexte), encryptText(row.emotions), encryptText(row.pensees),
+        encryptText(row.comportements), encryptText(row.comportements_entourage), row.id,
+      ],
+    });
+  }
+
+  await client.execute(
+    `INSERT INTO settings (key, value) VALUES ('psy_encryption_migrated', '1')
+     ON CONFLICT(key) DO UPDATE SET value = '1'`
+  );
 }
 
 interface HabitSeed {
@@ -523,6 +577,36 @@ async function initSchema(client: Client): Promise<void> {
       mime_type   TEXT NOT NULL,
       data        BLOB NOT NULL,
       created_at  TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS notes (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      titre       TEXT NOT NULL,
+      type        TEXT NOT NULL DEFAULT 'fleeting',
+      statut      TEXT NOT NULL DEFAULT 'brouillon',
+      tags        TEXT,
+      contenu     TEXT,
+      inbox_id    INTEGER REFERENCES inbox(id) ON DELETE SET NULL,
+      created_at  TEXT DEFAULT (datetime('now','localtime')),
+      updated_at  TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS liens (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_type  TEXT NOT NULL,
+      source_id    INTEGER NOT NULL,
+      target_type  TEXT NOT NULL,
+      target_id    INTEGER NOT NULL,
+      created_at   TEXT DEFAULT (datetime('now','localtime')),
+      UNIQUE(source_type, source_id, target_type, target_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS embeddings (
+      entity_type TEXT NOT NULL,
+      entity_id   INTEGER NOT NULL,
+      vector      BLOB NOT NULL,
+      updated_at  TEXT DEFAULT (datetime('now','localtime')),
+      PRIMARY KEY (entity_type, entity_id)
     );
   `);
 }
@@ -790,6 +874,36 @@ async function initGuestSchema(client: Client): Promise<void> {
       habit_id INTEGER NOT NULL REFERENCES guest_habit_definitions(id) ON DELETE CASCADE,
       valeur   REAL,
       UNIQUE(date, habit_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS guest_notes (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      titre       TEXT NOT NULL,
+      type        TEXT NOT NULL DEFAULT 'fleeting',
+      statut      TEXT NOT NULL DEFAULT 'brouillon',
+      tags        TEXT,
+      contenu     TEXT,
+      inbox_id    INTEGER REFERENCES guest_inbox(id) ON DELETE SET NULL,
+      created_at  TEXT DEFAULT (datetime('now','localtime')),
+      updated_at  TEXT DEFAULT (datetime('now','localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS guest_liens (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_type  TEXT NOT NULL,
+      source_id    INTEGER NOT NULL,
+      target_type  TEXT NOT NULL,
+      target_id    INTEGER NOT NULL,
+      created_at   TEXT DEFAULT (datetime('now','localtime')),
+      UNIQUE(source_type, source_id, target_type, target_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS guest_embeddings (
+      entity_type TEXT NOT NULL,
+      entity_id   INTEGER NOT NULL,
+      vector      BLOB NOT NULL,
+      updated_at  TEXT DEFAULT (datetime('now','localtime')),
+      PRIMARY KEY (entity_type, entity_id)
     );
   `);
 }

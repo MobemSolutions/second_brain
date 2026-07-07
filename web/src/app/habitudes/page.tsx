@@ -18,6 +18,7 @@ interface HabitDef {
   target_freq: string | null;
   score_impact: ScoreImpact;
   ordre: number;
+  prioritaire: number;
 }
 
 interface HistValue {
@@ -100,7 +101,7 @@ function lastDoneLabel(history: HistValue[], habitId: number, doneToday: boolean
   return `Il y a ${days}j`;
 }
 
-const EMPTY_FORM = { label: "", emoji: "", unite: "", cible: "", target_freq: "", score_impact: "aucun" as ScoreImpact };
+const EMPTY_FORM = { label: "", emoji: "", unite: "", cible: "", target_freq: "", score_impact: "aucun" as ScoreImpact, prioritaire: false };
 
 export default function HabitudesPage() {
   const [defs, setDefs] = useState<HabitDef[]>([]);
@@ -211,6 +212,7 @@ export default function HabitudesPage() {
         label: form.label, emoji: form.emoji || null, type, section,
         unite: form.unite || null, cible: form.cible ? parseFloat(form.cible) : null,
         target_freq: form.target_freq || null, score_impact: form.score_impact,
+        prioritaire: form.prioritaire ? 1 : 0,
       }),
     });
     setAddingSection(null);
@@ -225,6 +227,7 @@ export default function HabitudesPage() {
         label: form.label, emoji: form.emoji || null,
         unite: form.unite || null, cible: form.cible ? parseFloat(form.cible) : null,
         target_freq: form.target_freq || null, score_impact: form.score_impact,
+        prioritaire: form.prioritaire ? 1 : 0,
       }),
     });
     setEditingDef(null);
@@ -397,6 +400,7 @@ export default function HabitudesPage() {
             label: editingDef.label, emoji: editingDef.emoji ?? "",
             unite: editingDef.unite ?? "", cible: editingDef.cible?.toString() ?? "",
             target_freq: editingDef.target_freq ?? "", score_impact: editingDef.score_impact,
+            prioritaire: !!editingDef.prioritaire,
           }}
           onSubmit={(form) => updateHabit(editingDef.id, form)}
           onCancel={() => setEditingDef(null)}
@@ -425,6 +429,14 @@ function HabitSection({
 
   const [dragId, setDragId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
+  const [showAll, setShowAll] = useState(false);
+
+  // Only collapse behind "Voir plus" once the user has actually flagged some
+  // items as prioritaire — otherwise a fresh install (all prioritaire = 0)
+  // would hide everything by default, which would look broken.
+  const hasPriority = defs.some((d) => d.prioritaire);
+  const visibleDefs = hasPriority && !showAll ? defs.filter((d) => d.prioritaire) : defs;
+  const hiddenCount = defs.length - visibleDefs.length;
 
   const handleDrop = (targetId: number) => {
     if (dragId !== null && dragId !== targetId) {
@@ -476,7 +488,7 @@ function HabitSection({
         <p className="text-xs text-zinc-600">Aucun item — clique sur + pour en ajouter un</p>
       ) : isMetriques ? (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {defs.map((d) => (
+          {visibleDefs.map((d) => (
             <div
               key={d.id}
               className={`relative group cursor-grab active:cursor-grabbing rounded-lg transition-all ${
@@ -498,7 +510,7 @@ function HabitSection({
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {defs.map((d) => {
+          {visibleDefs.map((d) => {
             const last = section === "ponctuel" ? lastDoneLabel(history, d.id, !!valuesToday[d.id]) : undefined;
             const sublabel = last && d.target_freq ? `${last} · cible ${d.target_freq}` : last;
             return (
@@ -521,6 +533,23 @@ function HabitSection({
             );
           })}
         </div>
+      )}
+
+      {hasPriority && hiddenCount > 0 && (
+        <button
+          onClick={() => setShowAll(true)}
+          className="text-xs text-zinc-600 hover:text-violet-400 transition-colors mt-2"
+        >
+          Voir plus ({hiddenCount})
+        </button>
+      )}
+      {hasPriority && showAll && (
+        <button
+          onClick={() => setShowAll(false)}
+          className="text-xs text-zinc-600 hover:text-violet-400 transition-colors mt-2"
+        >
+          Voir moins
+        </button>
       )}
     </div>
   );
@@ -592,6 +621,11 @@ function HabitFormInline({ type, section, initial, onSubmit, onCancel }: {
           <option value="negatif">Négatif</option>
         </select>
       </div>
+      <label className="flex items-center gap-1.5 text-xs text-zinc-500 pb-1.5 cursor-pointer">
+        <input type="checkbox" checked={form.prioritaire}
+          onChange={(e) => setForm((p) => ({ ...p, prioritaire: e.target.checked }))} />
+        ⭐ Prioritaire
+      </label>
       <button type="submit" className="btn-primary py-1.5 px-3 text-xs">{initial ? "Enregistrer" : "Ajouter"}</button>
       <button type="button" onClick={onCancel} className="btn-ghost py-1.5 px-2 text-xs">Annuler</button>
     </form>
