@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { calcHabitScore, type HabitDefLike } from "@/lib/habitScore";
 
 export const dynamic = "force-dynamic";
 
@@ -32,22 +33,14 @@ export async function GET() {
     )
     .all();
 
-  const habit_today = await db
-    .prepare("SELECT * FROM habitudes WHERE date = ?")
-    .get(today) as Record<string, unknown> | undefined;
-
-  let habit_score = 0;
-  if (habit_today) {
-    const h = habit_today;
-    const pos =
-      (h.sport_fait ? 1 : 0) +
-      ((h.sommeil as number) >= 7 ? 1 : 0) +
-      ((h.eau as number) >= 2 ? 1 : 0) +
-      ((h.meditation as number) >= 10 ? 1 : 0) +
-      ((h.lecture as number) >= 20 ? 1 : 0);
-    const neg = (h.alcool ? 1 : 0) + (h.ecran_dodo ? 1 : 0);
-    habit_score = Math.max(0, Math.min(10, pos * 2 - neg));
-  }
+  const habit_defs = await db
+    .prepare("SELECT * FROM habit_definitions WHERE actif = 1 ORDER BY section, ordre, id")
+    .all() as unknown as HabitDefLike[];
+  const habit_values_today = await db
+    .prepare("SELECT habit_id, valeur FROM habit_values WHERE date = ?")
+    .all(today) as { habit_id: number; valeur: number | null }[];
+  const valuesByHabit = Object.fromEntries(habit_values_today.map((v) => [v.habit_id, v.valeur]));
+  const habit_score = calcHabitScore(habit_defs, valuesByHabit);
 
   const monthly_cost = (
     await db
@@ -64,23 +57,32 @@ export async function GET() {
       .get() as { total: number }
   ).total;
 
-  const sub_alerts = await db
-    .prepare(
-      `SELECT *,
-         CAST((julianday(date_renouvellement) - julianday('now')) AS INTEGER) as jours_restants
-       FROM abonnements
-       WHERE actif = 1
-         AND date_renouvellement IS NOT NULL
-         AND CAST((julianday(date_renouvellement) - julianday('now')) AS INTEGER) <= 14
-       ORDER BY date_renouvellement ASC`
-    )
-    .all();
+  const last_head = await db
+    .prepare("SELECT discipline, date FROM sport ORDER BY date DESC, created_at DESC LIMIT 1")
+    .get() as { discipline: string; date: string } | undefined;
+  const last_session = last_head
+    ? {
+        discipline: last_head.discipline,
+        date: last_head.date,
+        exercises: await db
+          .prepare(
+            `SELECT * FROM sport WHERE date = ? AND discipline = ? ORDER BY created_at ASC`
+          )
+          .all(last_head.date, last_head.discipline),
+      }
+    : null;
 
-  const recent_sport = await db
-    .prepare(
-      `SELECT * FROM sport ORDER BY date DESC, created_at DESC LIMIT 5`
-    )
-    .all();
+  const todayDow = new Date(today + "T00:00:00Z").getUTCDay(); // 0=Sun..6=Sat
+  const mondayOffset = todayDow === 0 ? 6 : todayDow - 1;
+  const monday = new Date(today + "T00:00:00Z");
+  monday.setUTCDate(monday.getUTCDate() - mondayOffset);
+  const weekStart = monday.toISOString().slice(0, 10);
+
+  const sport_week_count = (
+    await db
+      .prepare(`SELECT COUNT(DISTINCT date) as n FROM sport WHERE date >= ?`)
+      .get(weekStart) as { n: number }
+  ).n;
 
   const inbox_count = (
     await db
@@ -91,11 +93,10 @@ export async function GET() {
   return NextResponse.json({
     tasks_today,
     active_projects,
-    habit_today,
     habit_score,
     monthly_cost,
-    sub_alerts,
-    recent_sport,
+    last_session,
+    sport_week_count,
     inbox_count,
   });
 }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Save, Plus, Pencil, Trash2, GripVertical } from "lucide-react";
+import { calcHabitScore } from "@/lib/habitScore";
 
 type Section = "metriques" | "general" | "matin" | "soir" | "ponctuel";
 type ScoreImpact = "positif" | "negatif" | "aucun";
@@ -48,24 +49,7 @@ function toLocalDateStr(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-function calcScore(defs: HabitDef[], values: Record<number, number | null | undefined>): number {
-  let pos = 0, neg = 0;
-  for (const d of defs) {
-    if (d.score_impact === "aucun") continue;
-    const v = values[d.id];
-    const done = d.type === "metric"
-      ? (d.cible != null ? (v ?? 0) >= d.cible : (v ?? 0) > 0)
-      : !!v;
-    if (!done) continue;
-    if (d.score_impact === "positif") pos++;
-    else neg++;
-  }
-  // How many positive habits it takes to fill the bar — scales with the
-  // total so adding more habits doesn't make a perfect day trivially easy.
-  const positifTotal = defs.filter((d) => d.score_impact === "positif").length;
-  const target = Math.max(20, Math.round(positifTotal * 0.5));
-  return Math.max(0, Math.min(10, Math.round((pos / target) * 10 - neg)));
-}
+const calcScore = calcHabitScore;
 
 function scoreColor(s: number): string {
   if (s >= 8) return "bg-emerald-500";

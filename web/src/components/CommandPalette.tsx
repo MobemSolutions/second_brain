@@ -73,6 +73,14 @@ export default function CommandPalette() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, close]);
 
+  // Lets other components (e.g. the dashboard header's search/capture
+  // buttons) open the palette without lifting its state up.
+  useEffect(() => {
+    const onOpenRequest = () => setOpen(true);
+    window.addEventListener("open-command-palette", onOpenRequest);
+    return () => window.removeEventListener("open-command-palette", onOpenRequest);
+  }, []);
+
   useEffect(() => { if (open) setTimeout(() => inputRef.current?.focus(), 0); }, [open]);
 
   useEffect(() => {
