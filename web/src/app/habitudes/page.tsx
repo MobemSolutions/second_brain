@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Save, Plus, Pencil, Trash2, GripVertical } from "lucide-react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Save, Plus, Pencil, Trash2, GripVertical, ArrowLeft } from "lucide-react";
 import { calcHabitScore } from "@/lib/habitScore";
 
 type Section = "metriques" | "general" | "matin" | "soir" | "ponctuel";
@@ -88,6 +89,17 @@ function lastDoneLabel(history: HistValue[], habitId: number, doneToday: boolean
 const EMPTY_FORM = { label: "", emoji: "", unite: "", cible: "", target_freq: "", score_impact: "aucun" as ScoreImpact, prioritaire: false };
 
 export default function HabitudesPage() {
+  return (
+    <Suspense fallback={null}>
+      <HabitudesPageInner />
+    </Suspense>
+  );
+}
+
+function HabitudesPageInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [defs, setDefs] = useState<HabitDef[]>([]);
   const [valuesToday, setValuesToday] = useState<Record<number, number | null>>({});
   const [history, setHistory] = useState<HistValue[]>([]);
@@ -98,13 +110,16 @@ export default function HabitudesPage() {
   const [editingDef, setEditingDef] = useState<HabitDef | null>(null);
 
   const todayStr = toLocalDateStr(new Date());
+  const dateParam = searchParams.get("date");
+  const selectedDate = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : todayStr;
+  const isToday = selectedDate === todayStr;
 
   const loadDefs = useCallback(() => {
     fetch("/api/habit-definitions").then((r) => (r.ok ? r.json() : [])).then(setDefs).catch(() => {});
   }, []);
 
   const loadValuesToday = useCallback(() => {
-    fetch(`/api/habit-values?date=${todayStr}`)
+    fetch(`/api/habit-values?date=${selectedDate}`)
       .then((r) => (r.ok ? r.json() : []))
       .then((rows: { habit_id: number; valeur: number | null }[]) => {
         const map: Record<number, number | null> = {};
@@ -112,20 +127,20 @@ export default function HabitudesPage() {
         setValuesToday(map);
       })
       .catch(() => {});
-  }, [todayStr]);
+  }, [selectedDate]);
 
   const loadHistory = useCallback(() => {
     fetch("/api/habit-values?days=35").then((r) => (r.ok ? r.json() : [])).then(setHistory).catch(() => {});
   }, []);
 
   const loadJournal = useCallback(() => {
-    fetch(`/api/habitudes?date=${todayStr}`)
+    fetch(`/api/habitudes?date=${selectedDate}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { humeur?: number; energie?: number; notes?: string } | null) => {
         setJournal(data ? { humeur: data.humeur ?? null, energie: data.energie ?? null, notes: data.notes ?? "" } : { humeur: null, energie: null, notes: "" });
       })
       .catch(() => {});
-  }, [todayStr]);
+  }, [selectedDate]);
 
   useEffect(() => { loadDefs(); loadHistory(); }, [loadDefs, loadHistory]);
   useEffect(() => { loadValuesToday(); loadJournal(); }, [loadValuesToday, loadJournal]);
@@ -138,8 +153,8 @@ export default function HabitudesPage() {
     fetch("/api/habit-values", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date: todayStr, values: [{ habit_id: habitId, valeur }] }),
-    }), [todayStr]);
+      body: JSON.stringify({ date: selectedDate, values: [{ habit_id: habitId, valeur }] }),
+    }), [selectedDate]);
 
   // Retries once after a short delay to ride through transient network/DB blips before giving up
   const saveValue = useCallback(async (habitId: number, valeur: number | null) => {
@@ -182,7 +197,7 @@ export default function HabitudesPage() {
     await fetch("/api/habitudes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date: todayStr, humeur: journal.humeur, energie: journal.energie, notes: journal.notes }),
+      body: JSON.stringify({ date: selectedDate, humeur: journal.humeur, energie: journal.energie, notes: journal.notes }),
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -258,12 +273,22 @@ export default function HabitudesPage() {
 
   return (
     <div className="space-y-6">
+      {!isToday && (
+        <button
+          onClick={() => router.push("/habitudes")}
+          className="flex items-center gap-2 text-xs font-medium text-violet-400 hover:text-violet-300 bg-violet-500/10 border border-violet-500/30 rounded-lg px-3 py-2 transition-colors"
+        >
+          <ArrowLeft size={13} />
+          Tu consultes le {new Date(selectedDate + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} — revenir à aujourd&apos;hui
+        </button>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-zinc-100">Habitudes</h1>
           <p className="text-zinc-500 text-sm mt-0.5">
-            {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
+            {new Date(selectedDate + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
           </p>
         </div>
         <div className="text-right">
@@ -346,11 +371,13 @@ export default function HabitudesPage() {
             <p key={i} className="text-center text-[10px] text-zinc-600">{d}</p>
           ))}
           {gridDays.map((day) => (
-            <div
+            <button
               key={day.date}
-              title={`${day.date}${day.score !== null ? ` — score ${day.score}/10` : " — aucune donnée"}`}
-              className={`h-8 rounded-md transition-colors cursor-default ${
-                day.date === todayStr ? "ring-2 ring-violet-500 ring-offset-1 ring-offset-zinc-900" : ""
+              type="button"
+              onClick={() => router.push(day.date === todayStr ? "/habitudes" : `/habitudes?date=${day.date}`)}
+              title={`${day.date}${day.score !== null ? ` — score ${day.score}/10` : " — aucune donnée"} — clique pour voir ce jour`}
+              className={`h-8 rounded-md transition-colors cursor-pointer hover:opacity-80 hover:ring-2 hover:ring-zinc-500 ${
+                day.date === selectedDate ? "ring-2 ring-violet-500 ring-offset-1 ring-offset-zinc-900" : ""
               } ${day.score !== null ? scoreColor(day.score) : "bg-zinc-800"}`}
             />
           ))}
