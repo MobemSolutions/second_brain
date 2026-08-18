@@ -22,6 +22,7 @@ const PAGES = [
   { href: "/sport", label: "Sport" },
   { href: "/nutrition", label: "Nutrition" },
   { href: "/habitudes", label: "Habitudes" },
+  { href: "/apparence", label: "Apparence" },
   { href: "/notes", label: "Notes" },
   { href: "/psy", label: "Psy TCC" },
   { href: "/courses", label: "Courses" },

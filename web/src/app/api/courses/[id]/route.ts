@@ -9,7 +9,7 @@ export async function PATCH(
   const { id } = await params;
   const body = await req.json();
 
-  const allowed = ["titre", "categorie", "tags", "prix", "lien", "achete"];
+  const allowed = ["titre", "categorie", "tags", "prix", "lien", "date", "achete"];
   const fields = Object.keys(body).filter((k) => allowed.includes(k));
   if (!fields.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
 

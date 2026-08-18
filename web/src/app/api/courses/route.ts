@@ -21,9 +21,9 @@ export async function POST(req: NextRequest) {
 
   const result = await db
     .prepare(
-      `INSERT INTO courses (titre, categorie, tags, prix, lien) VALUES (?, ?, ?, ?, ?)`
+      `INSERT INTO courses (titre, categorie, tags, prix, lien, date) VALUES (?, ?, ?, ?, ?, ?)`
     )
-    .run(b.titre, b.categorie || null, b.tags || null, b.prix ?? null, b.lien || null);
+    .run(b.titre, b.categorie || null, b.tags || null, b.prix ?? null, b.lien || null, b.date || null);
 
   const row = await db.prepare("SELECT * FROM courses WHERE id = ?").get(Number(result.lastInsertRowid));
   return NextResponse.json(row, { status: 201 });

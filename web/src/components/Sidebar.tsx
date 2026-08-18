@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Inbox, Target, CheckSquare,
   Dumbbell, Apple, Heart, Film, CreditCard, HeartHandshake, CalendarClock, ShoppingCart,
-  Menu, X, LogOut, BookOpen, ListChecks, Sparkles,
+  Menu, X, LogOut, BookOpen, ListChecks, Sparkles, ScanFace,
 } from "lucide-react";
 
 const nav = [
@@ -34,6 +34,7 @@ const nav = [
       { href: "/sport",      label: "Sport",       icon: Dumbbell },
       { href: "/nutrition",  label: "Nutrition",   icon: Apple },
       { href: "/habitudes",  label: "Habitudes",   icon: Heart },
+      { href: "/apparence",  label: "Apparence",   icon: ScanFace },
     ],
   },
   {

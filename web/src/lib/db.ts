@@ -182,6 +182,7 @@ async function migrate(client: Client): Promise<void> {
   await addCol(client, "media", "casting", "TEXT");
   await addCol(client, "projets", "description", "TEXT");
   await addCol(client, "projets", "couleur", "TEXT");
+  await addCol(client, "courses", "date", "TEXT");
   try {
     await client.execute(`CREATE TABLE IF NOT EXISTS settings (
       key   TEXT PRIMARY KEY,
@@ -260,6 +261,7 @@ async function migrate(client: Client): Promise<void> {
       tags       TEXT,
       prix       REAL,
       lien       TEXT,
+      date       TEXT,
       achete     INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now','localtime'))
     )`);
@@ -848,6 +850,7 @@ async function initGuestSchema(client: Client): Promise<void> {
       tags       TEXT,
       prix       REAL,
       lien       TEXT,
+      date       TEXT,
       achete     INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now','localtime'))
     );
